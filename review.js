@@ -1,11 +1,19 @@
 /*!
- * Guided Review Tool — review.js
+ * Guided Review Tool — review.js (the review engine)
  *
- *   ?review=author    author mode: pick elements, write notes, export the tour
+ *   ?review=author    author mode: pick elements, write notes
  *   ?review=<token>   reviewer mode: the client walks the tour and comments
  *
- * Loaded only on a review branch deploy of the site, never on main.
- * See README.md for the deploy arrangement and the file formats.
+ * The tool (index.html) adds this script to every page of a dropped project:
+ * in its own preview, and in the copy it publishes to the review site.
+ * See README.md.
+ *
+ * Script attributes:
+ *   data-tour      URL of review-tour.json
+ *   data-css       URL of review.css (default: next to this script)
+ *   data-root      URL path the project is served under (default "/")
+ *   data-mode      mode to use when the URL has no ?review= (tool preview)
+ *   data-embedded  running inside the tool: the tool handles publishing
  */
 (function () {
   'use strict';
@@ -22,6 +30,8 @@
     cssUrl: SCRIPT && SCRIPT.dataset.css
       ? new URL(SCRIPT.dataset.css, location.href).href
       : SCRIPT && SCRIPT.src ? new URL('review.css', SCRIPT.src).href : 'review.css',
+    root: ((SCRIPT && SCRIPT.dataset.root) || '/').replace(/\/*$/, '/'),
+    embedded: !!(SCRIPT && SCRIPT.hasAttribute('data-embedded')),
   };
 
   const TOUR_FORMAT = 'guided-review/tour';
@@ -127,32 +137,47 @@
 
   // --- pages ------------------------------------------------------------------
 
-  // "/", "/index.html" and "/about", "/about.html" are the same page on Netlify.
+  // A page is known by its file path inside the project: "index.html",
+  // "about.html". The same page has the same key in the tool's preview
+  // (/preview/about.html) and on the review site (/about or /about.html).
   function pageKey(pathname) {
-    let p = String(pathname || '/');
-    p = p.replace(/\/index\.html?$/i, '/').replace(/\.html?$/i, '');
-    if (p.length > 1) p = p.replace(/\/+$/, '');
-    return p || '/';
+    let p = String(pathname || '');
+    try { p = decodeURIComponent(p); } catch (e) { /* keep as is */ }
+    if (p.startsWith(CONFIG.root)) p = p.slice(CONFIG.root.length);
+    p = p.replace(/^\/+/, '');
+    if (p === '' || p.endsWith('/')) p += 'index.html';
+    if (!/\.[a-z0-9]+$/i.test(p)) p += '.html';
+    return p;
   }
   const PAGE = pageKey(location.pathname);
 
+  const TITLE_SPLIT = /\s+[|·•–—-]\s+/;
+
+  // og:site_name, else the site part of the tab title: "About — Acme" on inner
+  // pages, "Acme — tagline" on the home page.
   function defaultSiteName() {
     const meta = document.querySelector('meta[property="og:site_name"], meta[name="application-name"]');
-    return squash(meta && meta.getAttribute('content')) || location.hostname || 'Website';
+    if (meta && squash(meta.getAttribute('content'))) return squash(meta.getAttribute('content'));
+    const parts = squash(document.title).split(TITLE_SPLIT).filter(Boolean);
+    if (parts.length > 1) return /(^|\/)index\.html?$/i.test(PAGE) ? parts[0] : parts[parts.length - 1];
+    return parts[0] || 'Website';
   }
 
   function pageTitle(siteName) {
+    if (/(^|\/)index\.html?$/i.test(PAGE)) return 'Home';
     const raw = squash(document.title);
     const site = squash(siteName).toLowerCase();
-    const parts = raw.split(/\s+[|·•–—-]\s+/).map(squash).filter(Boolean);
+    const parts = raw.split(TITLE_SPLIT).map(squash).filter(Boolean);
     const rest = parts.filter((p) => p.toLowerCase() !== site);
-    if (rest.length && rest.length < parts.length) return rest[0];
-    if (/\/(index\.html?)?$/i.test(location.pathname)) return 'Home';
     return rest[0] || raw || PAGE;
   }
 
-  function withMode(path) {
-    return path + '?review=' + encodeURIComponent(MODE);
+  // URL of another page of the project. A mode set by data-mode needs no
+  // query string; one from ?review= is carried along.
+  function pageUrl(key) {
+    const fromAttr = SCRIPT && SCRIPT.dataset.mode === MODE;
+    return CONFIG.root + key.split('/').map(encodeURIComponent).join('/') +
+      (fromAttr ? '' : '?review=' + encodeURIComponent(MODE));
   }
 
   // --- data model ---------------------------------------------------------------
@@ -161,6 +186,7 @@
   //   { format, version, tourId, siteName, contact: { whatsapp, email },
   //     pages: { [pageKey]: { path, title } },
   //     steps: [ { id, page, path, title, note, anchor } ] }
+  //   page and path are both the page key, e.g. "about.html".
   //
   // Anchor:
   //   { selector, tag, text, fx, fy, fw, fh }   (f* = fractions of page size)
@@ -908,10 +934,32 @@
     setTimeout(() => box.remove(), 1800);
   }
 
+  // Height of a fixed or sticky site header at the top of the screen, so an
+  // element is never scrolled to where the header covers it.
+  function topInset() {
+    let inset = 0;
+    const vw = document.documentElement.clientWidth;
+    [8, vw / 2, vw - 8].forEach((x) => {
+      document.elementsFromPoint(x, 2).forEach((el) => {
+        if (isOurs(el)) return;
+        for (let e = el; e && e !== document.body && e !== document.documentElement; e = e.parentElement) {
+          const pos = getComputedStyle(e).position;
+          if (pos !== 'fixed' && pos !== 'sticky') continue;
+          const r = e.getBoundingClientRect();
+          if (r.top <= 2 && r.bottom < window.innerHeight * 0.4) inset = Math.max(inset, r.bottom);
+          break;
+        }
+      });
+    });
+    return Math.round(inset);
+  }
+
   function scrollRectIntoView(rect) {
     const vh = window.innerHeight;
-    const visible = rect.y >= window.scrollY + 16 && rect.y + rect.h <= window.scrollY + vh - 16;
-    if (!visible) scrollToY(rect.h < vh * 0.7 ? rect.y - (vh - rect.h) / 2 : rect.y - 40);
+    const inset = topInset();
+    const room = vh - inset;
+    const visible = rect.y >= window.scrollY + inset + 16 && rect.y + rect.h <= window.scrollY + vh - 16;
+    if (!visible) scrollToY(rect.h < room * 0.7 ? rect.y - inset - (room - rect.h) / 2 : rect.y - inset - 40);
   }
 
   // ===========================================================================
@@ -978,7 +1026,7 @@
       return h('div', { class: 'gr-panel-head' },
         h('div', null,
           h('div', { class: 'gr-panel-title' }, 'Tour builder'),
-          h('div', { class: 'gr-muted' }, 'This page: ' + pageTitle(tour.siteName) + '  (' + location.pathname + ')')),
+          h('div', { class: 'gr-muted' }, 'This page: ' + pageTitle(tour.siteName) + '  (' + PAGE + ')')),
         h('button', { class: 'gr-icon-btn', type: 'button', 'aria-label': 'Collapse panel', title: 'Collapse', onclick: () => setCollapsed(true) }, '–'));
     }
 
@@ -1134,6 +1182,14 @@
     }
 
     function actionsView() {
+      if (CONFIG.embedded) {
+        // Inside the tool, the draft is saved as you go and Publish sends it.
+        return h('div', { class: 'gr-section gr-actions' },
+          h('p', { class: 'gr-muted' }, 'Saved as you go. Press Publish in the bar above to send the tour to the review site.'),
+          h('div', { class: 'gr-row' },
+            h('button', { class: 'gr-btn', type: 'button', onclick: openLoadFeedback }, 'Load feedback'),
+            h('button', { class: 'gr-btn gr-btn-ghost', type: 'button', onclick: resetTour }, 'Clear tour…')));
+      }
       return h('div', { class: 'gr-section gr-actions' },
         h('div', { class: 'gr-row' },
           h('button', { class: 'gr-btn gr-btn-primary', type: 'button', onclick: exportTour, disabled: !tour.steps.length }, 'Export tour'),
@@ -1160,7 +1216,7 @@
           editing = {
             isNew: true,
             el,
-            step: { id: uid('s'), page: PAGE, path: location.pathname, title: '', note: '', anchor: recordAnchor(el) },
+            step: { id: uid('s'), page: PAGE, path: PAGE, title: '', note: '', anchor: recordAnchor(el) },
           };
           render();
         },
@@ -1170,7 +1226,7 @@
     function goToStep(s, edit) {
       if (s.page !== PAGE) {
         ss.set(KEY.focus, (edit ? 'edit:' : 'step:') + s.id);
-        location.href = withMode(s.path);
+        location.href = pageUrl(s.page);
         return;
       }
       const res = resolveAnchor(s.anchor);
@@ -1196,7 +1252,7 @@
         s.title = shorten(note, 50);
       }
       if (editing.isNew) tour.steps.push(s);
-      tour.pages[PAGE] = { path: location.pathname, title: pageTitle(tour.siteName) };
+      tour.pages[PAGE] = { path: PAGE, title: pageTitle(tour.siteName) };
       saveTour();
       editing = null;
       render();
@@ -1299,7 +1355,7 @@
       if (!pin.anchor) { toast('This comment came from the text summary, so it has no position on the page.'); return; }
       if (pin.page !== PAGE) {
         ss.set(KEY.focus, 'pin:' + pin.id);
-        location.href = withMode(pin.path);
+        location.href = pageUrl(pin.page);
         return;
       }
       const p = pinPoint(pin);
@@ -1321,6 +1377,14 @@
     }
 
     function resetTour() {
+      if (CONFIG.embedded) {
+        if (!confirm('Delete every step of this tour? This cannot be undone.')) return;
+        tour = newTour();
+        editing = null;
+        saveTour();
+        render();
+        return;
+      }
       if (!confirm('Throw away your local draft? The tour is reloaded from the deployed review-tour.json, or starts empty if there is none.')) return;
       ls.del(KEY.draft);
       tour = newTour();
@@ -1451,7 +1515,7 @@
     fixedLayer.append(bar);
 
     function registerPage() {
-      fb.pages[PAGE] = { path: location.pathname, title: pageTitle(tour.siteName) };
+      fb.pages[PAGE] = { path: PAGE, title: pageTitle(tour.siteName) };
     }
 
     const pageName = (key) => (tour.pages[key] && tour.pages[key].title) || key;
@@ -1530,7 +1594,7 @@
       if (s.page !== PAGE) {
         hideStep();
         toast('Opening the ' + pageName(s.page) + ' page…', { sticky: true });
-        location.href = withMode(s.path);
+        location.href = pageUrl(s.page);
         return;
       }
       showStep(true);
@@ -1662,7 +1726,8 @@
       const m = 12;
       const gap = 12;
       const bottomSpace = barSpace();
-      const avail = vh - m * 2 - bottomSpace;
+      const inset = topInset();
+      const avail = vh - m * 2 - bottomSpace - inset;
       const midX = clamp(R.x + R.w / 2 - w / 2, sx + m, sx + vw - w - m);
       let x;
       let y;
@@ -1672,19 +1737,19 @@
         // Element and tooltip fit on screen together: tooltip below.
         x = midX;
         y = R.y + R.h + gap;
-        focusTop = R.y - m - (avail - (R.h + gap + th)) / 2;
+        focusTop = R.y - m - inset - (avail - (R.h + gap + th)) / 2;
       } else if (sx + vw - (R.x + R.w) >= w + gap + m) {
         x = R.x + R.w + gap;
         y = R.y;
-        focusTop = R.y - m;
+        focusTop = R.y - m - inset;
       } else if (R.x - sx >= w + gap + m) {
         x = R.x - gap - w;
         y = R.y;
-        focusTop = R.y - m;
+        focusTop = R.y - m - inset;
       } else if (R.y >= th + gap + m) {
         x = midX;
         y = R.y - gap - th;
-        focusTop = y - m;
+        focusTop = y - m - inset;
       } else {
         x = midX;
         y = R.y + R.h + gap;
@@ -1695,7 +1760,7 @@
       if (scroll) {
         const top = Math.min(R.y, y);
         const bottom = Math.max(R.y + R.h, y + th);
-        const onScreen = top >= window.scrollY + m && bottom <= window.scrollY + vh - bottomSpace - m;
+        const onScreen = top >= window.scrollY + m + inset && bottom <= window.scrollY + vh - bottomSpace - m;
         if (!onScreen) scrollToY(focusTop);
       }
     }
@@ -1709,14 +1774,15 @@
       tip.style.top = '';
       // The element gets its room first; the sheet scrolls inside what is left.
       // Only an element taller than most of the screen can end up underneath.
-      const avail = window.innerHeight - barSpace();
+      const inset = topInset();
+      const avail = window.innerHeight - barSpace() - inset;
       tip.style.maxHeight = Math.round(clamp(avail - R.h - 24, Math.min(200, avail * 0.5), avail * 0.6)) + 'px';
       if (!scroll) return;
       const sheetTop = window.innerHeight - tip.offsetHeight - barSpace();
-      const onScreen = R.y >= window.scrollY + 8 && R.y + R.h <= window.scrollY + sheetTop - 8;
+      const onScreen = R.y >= window.scrollY + inset + 8 && R.y + R.h <= window.scrollY + sheetTop - 8;
       if (!onScreen) {
-        const room = sheetTop - 16;
-        scrollToY(R.h < room ? R.y - Math.max(8, (room - R.h) / 3) : R.y - 8);
+        const room = sheetTop - inset - 16;
+        scrollToY(R.h < room ? R.y - inset - Math.max(8, (room - R.h) / 3) : R.y - inset - 8);
       }
     }
 
@@ -1771,7 +1837,7 @@
           const pin = {
             id: uid('p'),
             page: PAGE,
-            path: location.pathname,
+            path: PAGE,
             anchor: recordAnchor(el),
             offset: {
               x: round4(r.w ? clamp((e.pageX - r.x) / r.w, 0, 1) : 0.5),
@@ -2004,9 +2070,20 @@
   // 7. Boot
   // ===========================================================================
 
+  // Forms must not really send anything while a page is being reviewed. The
+  // site's own validation still runs; only the submission is stopped.
+  function holdForms() {
+    window.addEventListener('submit', (e) => {
+      if (e.defaultPrevented) return;
+      e.preventDefault();
+      toast('Forms are not sent during the review.');
+    });
+  }
+
   function boot() {
     document.body.append(host);
     watchLayout();
+    holdForms();
     if (IS_AUTHOR) initAuthor();
     else initReviewer();
   }

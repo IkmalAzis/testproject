@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Guided Review</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="bar" id="bar" hidden>
+    <div class="bar-group">
+      <span class="brand">Guided Review</span>
+      <span class="project-name" id="project-name"></span>
+      <label class="page-pick">
+        <span class="sr-only">Page</span>
+        <select id="page-select"></select>
+      </label>
+    </div>
+    <div class="bar-group">
+      <div class="segmented" role="group" aria-label="Preview as">
+        <button type="button" id="mode-author" aria-pressed="true">Author</button>
+        <button type="button" id="mode-client" aria-pressed="false">Client view</button>
+      </div>
+      <span class="status" id="status"></span>
+    </div>
+    <div class="bar-group bar-actions">
+      <button type="button" class="btn" id="copy-link" disabled>Copy client link</button>
+      <button type="button" class="btn btn-primary" id="publish">Publish</button>
+      <button type="button" class="btn btn-quiet" id="project-menu">Project…</button>
+      <button type="button" class="btn btn-quiet" id="settings" aria-label="Netlify settings" title="Netlify settings">Netlify…</button>
+    </div>
+  </header>
+
+  <main class="empty" id="empty">
+    <div class="drop-card" id="drop-card">
+      <h1>Drop a project folder</h1>
+      <p>A static HTML site: the folder with <code>index.html</code> in it. It opens here with the review tools, ready for you to write the tour.</p>
+      <label class="btn btn-primary btn-lg">
+        Choose folder
+        <input type="file" id="folder-input" webkitdirectory directory multiple hidden>
+      </label>
+      <p class="fine" id="empty-note">Nothing is uploaded until you press Publish. Publishing replaces whatever project is on your review site.</p>
+    </div>
+  </main>
+
+  <main class="work" id="work" hidden>
+    <iframe id="frame" title="Project preview"></iframe>
+  </main>
+
+  <div class="drop-veil" id="drop-veil" hidden>
+    <div>Drop the folder to open it</div>
+  </div>
+
+  <dialog class="dialog" id="dialog"></dialog>
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script src="inject-html.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
