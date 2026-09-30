@@ -287,10 +287,27 @@ Each branch deploy is its own origin, so each round starts clean.
 
 ---
 
+## Single-file pages
+
+The tour and the styles can also be embedded in the page itself, so it works
+when opened straight from disk (`file://`), with no server:
+
+```html
+<script type="application/json" id="guided-review-tour"> …review-tour.json… </script>
+<script type="text/css" id="guided-review-css"> …review.css… </script>
+<script data-mode="preview"> …review.js… </script>
+```
+
+When those elements exist, `review.js` uses them instead of fetching
+`review-tour.json` and loading `review.css`. `data-mode` sets the mode used
+when the URL has no `?review=` (a file opened on a phone usually cannot take
+one). Leave `data-mode` off on review deploys: it would switch the tool on for
+every visitor.
+
 ## Trying it locally
 
-`fetch()` of the tour does not work from `file://`, so serve the folder with
-any static server:
+The demo pages fetch `review-tour.json`, which does not work from `file://`,
+so serve the folder with any static server:
 
 ```sh
 npx http-server -c-1 .        # or: python3 -m http.server

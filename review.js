@@ -82,9 +82,11 @@
 
   // The mode is remembered for the tab, so ordinary links inside the site keep
   // the review running.
+  // data-mode is a default for single-file previews, which cannot be opened
+  // with a query string. Review deploys leave it out.
   const param = (new URLSearchParams(location.search).get('review') || '').trim();
   if (param) ss.set(KEY.mode, param);
-  const MODE = param || ss.get(KEY.mode);
+  const MODE = param || ss.get(KEY.mode) || (SCRIPT && SCRIPT.dataset.mode) || '';
   if (!MODE) return;
   window.__guidedReview = true;
   const IS_AUTHOR = MODE === 'author';
@@ -256,7 +258,13 @@
     return fb;
   }
 
+  // A tour embedded as <script type="application/json" id="guided-review-tour">
+  // wins over the file, so a page opened from disk (file://) works too.
   function fetchTour() {
+    const inline = document.getElementById('guided-review-tour');
+    if (inline) {
+      try { return Promise.resolve(normalizeTour(JSON.parse(inline.textContent))); } catch (e) { return Promise.resolve(null); }
+    }
     return fetch(CONFIG.tourUrl, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then(normalizeTour)
@@ -623,11 +631,19 @@
   host = document.createElement('guided-review');
   host.style.cssText = 'all:initial;position:absolute;top:0;left:0;width:0;height:0;z-index:2147483000;visibility:hidden;';
   const shadow = host.attachShadow({ mode: 'open' });
-  const cssLink = h('link', { rel: 'stylesheet', href: CONFIG.cssUrl });
   const reveal = () => { host.style.visibility = ''; };
-  cssLink.addEventListener('load', reveal);
-  cssLink.addEventListener('error', reveal);
-  setTimeout(reveal, 2500);
+  // Same for the styles: <script type="text/css" id="guided-review-css">.
+  const inlineCss = document.getElementById('guided-review-css');
+  let cssLink;
+  if (inlineCss) {
+    cssLink = h('style', null, inlineCss.textContent);
+    setTimeout(reveal, 0);
+  } else {
+    cssLink = h('link', { rel: 'stylesheet', href: CONFIG.cssUrl });
+    cssLink.addEventListener('load', reveal);
+    cssLink.addEventListener('error', reveal);
+    setTimeout(reveal, 2500);
+  }
 
   const app = h('div', { class: 'gr-app' });
   const docLayer = h('div', { class: 'gr-doc' }); // positioned in page coordinates
@@ -1868,7 +1884,8 @@
         siteName: tour.siteName,
         reviewer: squash(fb.reviewer),
         date: new Date().toISOString(),
-        pages: Object.assign({}, tour.pages, fb.pages),
+        // The author's page names win over the browser tab title.
+        pages: Object.assign({}, fb.pages, tour.pages),
         stepRefs,
         stepComments: keep(fb.stepComments),
         freePins: fb.freePins.filter((p) => hasText(p.text)).map((p) => Object.assign({}, p, { text: p.text.trim() })),
