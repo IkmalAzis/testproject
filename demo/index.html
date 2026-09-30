@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Home | Northwind Engineering</title>
+  <meta property="og:site_name" content="Northwind Engineering">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { brand: { 50: '#eef6ff', 600: '#1d5fd1', 700: '#174ba6', 900: '#0f2a5c' } } } }
+    };
+  </script>
+</head>
+<body class="bg-white text-slate-800 antialiased">
+  <header class="border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <a href="index.html" class="font-bold text-brand-900 text-lg">Northwind Engineering</a>
+      <button id="nav-toggle" class="md:hidden p-2" aria-label="Open menu">&#9776;</button>
+      <nav id="nav" class="hidden md:flex gap-6 text-sm">
+        <a href="index.html" class="text-brand-700 font-semibold">Home</a>
+        <a href="about.html">About</a>
+        <a href="contact.html">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section id="hero" class="bg-brand-50">
+      <div class="max-w-6xl mx-auto px-4 py-20">
+        <h1 class="text-4xl md:text-5xl font-bold text-brand-900 max-w-2xl">Mechanical and electrical engineering for industrial plants</h1>
+        <p class="mt-4 text-lg max-w-xl">We design, install and maintain the systems that keep factories running across the region.</p>
+        <a href="contact.html" class="inline-block mt-8 px-6 py-3 rounded bg-brand-600 text-white font-semibold">Talk to our engineers</a>
+      </div>
+    </section>
+
+    <section id="services" class="max-w-6xl mx-auto px-4 py-16">
+      <h2 class="text-3xl font-bold text-brand-900">Five service categories</h2>
+      <div class="mt-8 grid gap-6 md:grid-cols-3">
+        <article class="p-6 border rounded"><h3 class="font-semibold">Plant design</h3><p class="mt-2 text-sm">Layouts, piping and process flow for new lines.</p></article>
+        <article class="p-6 border rounded"><h3 class="font-semibold">Electrical systems</h3><p class="mt-2 text-sm">Switchgear, distribution and control panels.</p></article>
+        <article class="p-6 border rounded"><h3 class="font-semibold">HVAC</h3><p class="mt-2 text-sm">Ventilation and cooling for production floors.</p></article>
+        <article class="p-6 border rounded"><h3 class="font-semibold">Maintenance contracts</h3><p class="mt-2 text-sm">Planned and emergency maintenance, 24/7.</p></article>
+        <article class="p-6 border rounded"><h3 class="font-semibold">Energy audits</h3><p class="mt-2 text-sm">Find where your plant loses power and money.</p></article>
+      </div>
+    </section>
+
+    <section class="bg-slate-50">
+      <div class="max-w-6xl mx-auto px-4 py-16 grid gap-10 md:grid-cols-2 items-center">
+        <div>
+          <h2 class="text-3xl font-bold text-brand-900">Twenty years on the plant floor</h2>
+          <p class="mt-4">Our team has delivered more than 300 projects for food, chemical and electronics manufacturers.</p>
+        </div>
+        <ul class="grid grid-cols-3 gap-4 text-center">
+          <li class="p-4 bg-white rounded border"><span class="block text-3xl font-bold text-brand-700">300+</span><span class="text-sm">projects</span></li>
+          <li class="p-4 bg-white rounded border"><span class="block text-3xl font-bold text-brand-700">45</span><span class="text-sm">engineers</span></li>
+          <li class="p-4 bg-white rounded border"><span class="block text-3xl font-bold text-brand-700">24/7</span><span class="text-sm">support</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="faq" class="max-w-3xl mx-auto px-4 py-16">
+      <h2 class="text-3xl font-bold text-brand-900">Questions</h2>
+      <div class="mt-6 divide-y border-y">
+        <div class="faq-item py-4">
+          <button class="faq-q w-full text-left font-semibold">Do you work outside the region?</button>
+          <p class="faq-a hidden mt-2 text-sm">Yes, for maintenance contracts of twelve months or longer.</p>
+        </div>
+        <div class="faq-item py-4">
+          <button class="faq-q w-full text-left font-semibold">How fast can you respond to a breakdown?</button>
+          <p class="faq-a hidden mt-2 text-sm">Within four hours for contract customers.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="bg-brand-900 text-white">
+    <div class="max-w-6xl mx-auto px-4 py-10 text-sm">&copy; Northwind Engineering. Demo site for the review tool.</div>
+  </footer>
+
+  <script>
+    document.getElementById('nav-toggle').addEventListener('click', function () {
+      document.getElementById('nav').classList.toggle('hidden');
+    });
+    document.querySelectorAll('.faq-q').forEach(function (q) {
+      q.addEventListener('click', function () { q.nextElementSibling.classList.toggle('hidden'); });
+    });
+  </script>
+  <script src="../review.js" data-tour="review-tour.json" defer></script>
+</body>
+</html>

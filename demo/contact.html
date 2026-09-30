@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contact | Northwind Engineering</title>
+  <meta property="og:site_name" content="Northwind Engineering">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { brand: { 50: '#eef6ff', 600: '#1d5fd1', 700: '#174ba6', 900: '#0f2a5c' } } } }
+    };
+  </script>
+</head>
+<body class="bg-white text-slate-800 antialiased">
+  <header class="border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <a href="index.html" class="font-bold text-brand-900 text-lg">Northwind Engineering</a>
+      <button id="nav-toggle" class="md:hidden p-2" aria-label="Open menu">&#9776;</button>
+      <nav id="nav" class="hidden md:flex gap-6 text-sm">
+        <a href="index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="contact.html" class="text-brand-700 font-semibold">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-xl mx-auto px-4 py-16">
+    <h1 class="text-4xl font-bold text-brand-900">Talk to us</h1>
+    <p class="mt-4">Tell us about your plant. An engineer will reply within one working day.</p>
+    <form id="contact-form" class="mt-8 space-y-4" novalidate>
+      <label class="block"><span class="text-sm font-semibold">Name</span><input name="name" required class="mt-1 w-full border rounded px-3 py-2"></label>
+      <label class="block"><span class="text-sm font-semibold">Email</span><input name="email" type="email" required class="mt-1 w-full border rounded px-3 py-2"></label>
+      <label class="block"><span class="text-sm font-semibold">Message</span><textarea name="message" rows="5" required class="mt-1 w-full border rounded px-3 py-2"></textarea></label>
+      <p id="form-error" class="hidden text-sm text-red-700">Please fill in every field.</p>
+      <button type="submit" class="px-6 py-3 rounded bg-brand-600 text-white font-semibold">Send message</button>
+    </form>
+  </main>
+
+  <footer class="bg-brand-900 text-white">
+    <div class="max-w-6xl mx-auto px-4 py-10 text-sm">&copy; Northwind Engineering. Demo site for the review tool.</div>
+  </footer>
+
+  <script>
+    document.getElementById('nav-toggle').addEventListener('click', function () {
+      document.getElementById('nav').classList.toggle('hidden');
+    });
+    document.getElementById('contact-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var ok = Array.prototype.every.call(this.elements, function (el) { return !el.required || el.value.trim(); });
+      document.getElementById('form-error').classList.toggle('hidden', ok);
+    });
+  </script>
+  <script src="../review.js" data-tour="review-tour.json" defer></script>
+</body>
+</html>
