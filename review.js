@@ -1123,6 +1123,9 @@
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', String(i));
             li.classList.add('is-dragging');
+            // The page highlight would jump from step to step under the drag.
+            hoverStepId = null;
+            layout();
           },
           ondragend: () => {
             dragFrom = -1;
@@ -1136,15 +1139,25 @@
             li.classList.toggle('drop-before', !after);
             li.classList.toggle('drop-after', after);
           },
-          ondragleave: () => li.classList.remove('drop-before', 'drop-after'),
+          // Moving over the text inside a step also fires dragleave; only a real
+          // exit from the step should clear the drop line.
+          ondragleave: (e) => { if (!li.contains(e.relatedTarget)) li.classList.remove('drop-before', 'drop-after'); },
           ondrop: (e) => {
             e.preventDefault();
             if (dragFrom < 0) return;
             const r = li.getBoundingClientRect();
             moveStep(dragFrom, e.clientY > r.top + r.height / 2 ? i + 1 : i);
           },
-          onmouseenter: () => { hoverStepId = s.id; layout(); },
-          onmouseleave: () => { hoverStepId = null; layout(); },
+          onmouseenter: () => {
+            if (dragFrom >= 0) return;
+            hoverStepId = s.id;
+            layout();
+          },
+          onmouseleave: () => {
+            if (hoverStepId !== s.id) return;
+            hoverStepId = null;
+            layout();
+          },
         },
         h('span', { class: 'gr-grip', title: 'Drag to reorder', 'aria-hidden': 'true' }, '⋮⋮'),
         h('span', { class: 'gr-num' }, i + 1),
@@ -1689,16 +1702,24 @@
       const n = steps.length;
       const last = i === n - 1;
       const next = steps[i + 1];
+      // Starts two lines tall and grows with what is typed.
+      const fit = () => {
+        ta.style.height = 'auto';
+        ta.style.height = Math.min(ta.scrollHeight + 2, 180) + 'px';
+      };
       const ta = h('textarea', {
-        class: 'gr-textarea',
-        rows: 3,
+        class: 'gr-textarea gr-grow',
+        rows: 2,
         'aria-label': 'Your comment on this part (optional)',
         oninput: () => {
           fb.stepComments[s.id] = ta.value;
           save();
+          fit();
+          scheduleLayout();
         },
       });
       ta.value = fb.stepComments[s.id] || '';
+      requestAnimationFrame(fit);
       tipWarn = h('p', { class: 'gr-warn', hidden: true });
 
       const el = h('div', { class: 'gr-tip', role: 'dialog', 'aria-label': 'Tour stop ' + (i + 1) + ' of ' + n },

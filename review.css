@@ -720,8 +720,16 @@ p {
 .gr-note {
   margin: 0 0 12px;
   color: var(--gr-ink);
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.45;
+  /* Keep the line breaks the author typed. */
+  white-space: pre-line;
+}
+
+.gr-textarea.gr-grow {
+  min-height: 0;
+  resize: none;
+  overflow-y: auto;
 }
 
 .gr-tip .gr-field {
