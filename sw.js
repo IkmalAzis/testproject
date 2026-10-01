@@ -6,7 +6,7 @@
  */
 importScripts('inject-html.js');
 
-const { injectHtml, engineTag, encodePath } = self.GuidedReviewInject;
+const { injectHtml, engineTag, appAddressTag, encodePath } = self.GuidedReviewInject;
 
 const PROJECT_CACHE = 'gr-project';
 const PREFIX = '/preview/';
@@ -42,19 +42,27 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
+// The tool never puts its own pages in a frame, so a framed page of this
+// origin is the preview, even an app that has moved its address off /preview/.
 async function fromPreview(event) {
   const req = event.request;
-  if (req.mode === 'navigate') {
-    return req.destination === 'iframe' && !!req.referrer && new URL(req.referrer).pathname.startsWith(PREFIX);
-  }
+  if (req.mode === 'navigate') return req.destination === 'iframe';
   if (!event.clientId) return false;
   const client = await self.clients.get(event.clientId);
-  return !!client && new URL(client.url).pathname.startsWith(PREFIX);
+  return !!client && (client.frameType === 'nested' || new URL(client.url).pathname.startsWith(PREFIX));
 }
 
 async function serveInternal(url) {
   const cache = await caches.open(PROJECT_CACHE);
   return (await cache.match(url.pathname)) || new Response('Not found', { status: 404 });
+}
+
+// One HTML file, index.html: a React / Vue / Svelte style app that routes itself.
+async function isSinglePageApp(cache) {
+  const html = (await cache.keys())
+    .map((r) => new URL(r.url).pathname)
+    .filter((p) => p.startsWith(PREFIX) && /\.html?$/i.test(p));
+  return html.length === 1 && /\/index\.html?$/i.test(html[0]);
 }
 
 async function readConfig(cache) {
@@ -79,17 +87,26 @@ async function serveProject(url) {
     if (!/text\/html/i.test(res.headers.get('Content-Type') || '')) return res;
 
     const config = await readConfig(cache);
+    const spa = await isSinglePageApp(cache);
     const html = injectHtml(await res.text(), {
+      head: spa ? appAddressTag(PREFIX) : '',
       body: engineTag({
         src: '/review.js?' + ENGINE_MARK,
         css: '/review.css?' + ENGINE_MARK,
         tour: INTERNAL + 'tour.json',
-        root: PREFIX,
+        root: spa ? '/' : PREFIX,
         mode: config.mode || 'author',
         embedded: true,
+        spa,
       }),
     });
     return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+  }
+
+  // A single-page app's own routes (/about, /products/12) have no file: like
+  // the review site, answer with the app's index.html.
+  if (!/\.(?!html?$)[a-z0-9]+$/i.test(rel) && (await isSinglePageApp(cache))) {
+    return serveProject(new URL(PREFIX + 'index.html', url.origin));
   }
 
   return new Response(

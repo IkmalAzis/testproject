@@ -14,6 +14,7 @@
  *   data-root      URL path the project is served under (default "/")
  *   data-mode      mode to use when the URL has no ?review= (tool preview)
  *   data-embedded  running inside the tool: the tool handles publishing
+ *   data-spa       the project is a single-page app that routes itself
  */
 (function () {
   'use strict';
@@ -32,6 +33,8 @@
       : SCRIPT && SCRIPT.src ? new URL('review.css', SCRIPT.src).href : 'review.css',
     root: ((SCRIPT && SCRIPT.dataset.root) || '/').replace(/\/*$/, '/'),
     embedded: !!(SCRIPT && SCRIPT.hasAttribute('data-embedded')),
+    // A single-page app (React, Vue…): one index.html that routes itself.
+    spa: !!(SCRIPT && SCRIPT.hasAttribute('data-spa')),
   };
 
   const TOUR_FORMAT = 'guided-review/tour';
@@ -150,11 +153,45 @@
     try { p = decodeURIComponent(p); } catch (e) { /* keep as is */ }
     if (p.startsWith(CONFIG.root)) p = p.slice(CONFIG.root.length);
     p = p.replace(/^\/+/, '');
+    if (CONFIG.spa) {
+      // An app's own routes keep their shape: "about", "products/12".
+      p = p.replace(/\/+$/, '');
+      return p === '' || /^index\.html?$/i.test(p) ? 'index.html' : p;
+    }
     if (p === '' || p.endsWith('/')) p += 'index.html';
     if (!/\.[a-z0-9]+$/i.test(p)) p += '.html';
     return p;
   }
-  const PAGE = pageKey(location.pathname);
+
+  // Apps with hash routes (#/about) are told apart by the hash too.
+  function currentPage() {
+    const key = pageKey(location.pathname);
+    return CONFIG.spa && /^#\//.test(location.hash) ? key + location.hash : key;
+  }
+  let PAGE = currentPage();
+
+  // A single-page app changes route without loading a page. Watch for it, so
+  // the steps and pins of the new route show up.
+  const routeListeners = [];
+  const onRoute = (fn) => routeListeners.push(fn);
+  if (CONFIG.spa) {
+    const check = () => {
+      const key = currentPage();
+      if (key === PAGE) return;
+      PAGE = key;
+      routeListeners.forEach((fn) => fn());
+    };
+    ['pushState', 'replaceState'].forEach((m) => {
+      const original = history[m];
+      history[m] = function () {
+        const result = original.apply(this, arguments);
+        setTimeout(check, 0);
+        return result;
+      };
+    });
+    window.addEventListener('popstate', check);
+    window.addEventListener('hashchange', check);
+  }
 
   const TITLE_SPLIT = /\s+[|·•–—-]\s+/;
 
@@ -174,15 +211,40 @@
     const site = squash(siteName).toLowerCase();
     const parts = raw.split(TITLE_SPLIT).map(squash).filter(Boolean);
     const rest = parts.filter((p) => p.toLowerCase() !== site);
-    return rest[0] || raw || PAGE;
+    if (rest[0]) return rest[0];
+    // An app often keeps one tab title on every route: name the route instead.
+    if (CONFIG.spa) return routeName(PAGE);
+    return raw || PAGE;
+  }
+
+  // "about" -> "About", "products/12" -> "Products / 12", "index.html#/team" -> "Team".
+  function routeName(key) {
+    const words = key.replace(/^index\.html?/i, '').replace(/^#?\/?/, '').split('/').filter(Boolean)
+      .map((w) => w.replace(/[-_]+/g, ' ').replace(/^./, (c) => c.toUpperCase()));
+    return words.join(' / ') || 'Home';
   }
 
   // URL of another page of the project. A mode set by data-mode needs no
   // query string; one from ?review= is carried along.
   function pageUrl(key) {
     const fromAttr = SCRIPT && SCRIPT.dataset.mode === MODE;
-    return CONFIG.root + key.split('/').map(encodeURIComponent).join('/') +
-      (fromAttr ? '' : '?review=' + encodeURIComponent(MODE));
+    const hashAt = key.indexOf('#');
+    let path = hashAt < 0 ? key : key.slice(0, hashAt);
+    if (CONFIG.spa && path === 'index.html') path = ''; // an app's home route is "/"
+    return CONFIG.root + path.split('/').map(encodeURIComponent).join('/') +
+      (fromAttr ? '' : '?review=' + encodeURIComponent(MODE)) +
+      (hashAt < 0 ? '' : key.slice(hashAt));
+  }
+
+  // Waits (up to a few seconds) for a step's elements to be on the page: an
+  // app draws them after it loads.
+  function whenOnPage(step, cb) {
+    const started = Date.now();
+    const tryNow = () => {
+      if (resolveAnchor(step.anchor).status === 'ok' || Date.now() - started > 4000) cb();
+      else setTimeout(tryNow, 200);
+    };
+    tryNow();
   }
 
   // --- data model ---------------------------------------------------------------
@@ -1810,13 +1872,20 @@
       setTimeout(() => {
         if (kind === 'pin' && feedback) {
           const pin = feedback.freePins.find((p) => p.id === id);
-          if (pin) showFeedbackItem({ kind: 'pin', pin });
+          if (pin) whenOnPage(pin, () => showFeedbackItem({ kind: 'pin', pin }));
         } else {
           const s = tour.steps.find((x) => x.id === id);
-          if (s && s.page === PAGE) goToStep(s, kind === 'edit');
+          if (s && s.page === PAGE) whenOnPage(s, () => goToStep(s, kind === 'edit'));
         }
       }, 400);
     }
+
+    // An app moved to another route: show that route's steps and comments.
+    onRoute(() => {
+      if (editing && editing.step.page !== PAGE) editing = null;
+      hoverStepId = null;
+      render();
+    });
   }
 
   // ===========================================================================
@@ -2614,8 +2683,17 @@
         showWelcomeBack(total);
       } else if (state.touring && steps[state.stepIndex] && steps[state.stepIndex].page === PAGE) {
         // Wait for the page to settle before measuring and scrolling.
-        setTimeout(() => showStep(true), 250);
+        setTimeout(() => whenOnPage(steps[state.stepIndex], () => showStep(true)), 250);
       }
+      // An app moved to another route without loading a page.
+      onRoute(() => {
+        closeFloating();
+        if (tipVisible) hideStep();
+        renderPins();
+        renderBar();
+        const s = steps[state.stepIndex];
+        if (state.touring && s && s.page === PAGE) whenOnPage(s, () => showStep(true));
+      });
       if (!storageOk) onStorageFail();
     });
   }

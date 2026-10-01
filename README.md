@@ -45,6 +45,7 @@ Change or disconnect this later with **Netlify…** in the top bar.
 1. **Drop the project folder** anywhere on the tool page, or press
    **Choose folder**. The tool finds the folder with `index.html` in it, and
    leaves out hidden files, `.git` and `node_modules`. Nothing is uploaded yet.
+   For a React, Vue or Svelte app, see [Apps](#apps-react-vue-svelte) below.
 2. **Write the tour** in the preview (desktop). Click the site's own links, or
    use the page list in the top bar, to move between pages.
    - **+ Pick an element**, click it, write one or two sentences (soft limit
@@ -76,6 +77,26 @@ Change or disconnect this later with **Netlify…** in the top bar.
 
 The status in the top bar tells you whether the review site is up to date:
 *Not published yet*, *Published 5 min ago*, or *Tour changed since publishing*.
+
+### Apps (React, Vue, Svelte…)
+
+An app's source code cannot run in a browser as it is; dropped as it is, it
+shows a blank page. Build it first:
+
+1. In the app's folder (e.g. `frontend`), run `npm run build`.
+2. Drop the whole folder. The tool picks the build output (`dist`, `build` or
+   `out`) by itself and names the project after the app's folder. Dropping
+   source code without a build shows a message saying so.
+
+The app's routes (`/about`, `/products/12`, or `#/about`) count as pages:
+click through the app as usual, and steps are kept per route. On the review
+site every route serves the app (a `_redirects` rule is added, unless the
+project has its own).
+
+Only the front end is published. Anything the app loads from its own back end
+(`/api/…`, a server on your machine) will not be there on the review site, so
+review screens that show data only if the back end is reachable from the
+internet.
 
 ---
 
@@ -146,6 +167,14 @@ Netlify's API allows this straight from the browser.
 **Pages** are known by their path in the project: `index.html`, `about.html`.
 The same page has the same name in the preview (`/preview/about.html`) and on
 the review site (`/about.html` or `/about`).
+
+**Apps.** A project with one HTML file, `index.html`, is treated as an app
+that routes itself. In the preview its address is put back to the one the app
+expects (`/about`, not `/preview/about`) before its scripts run, so its router
+finds the route; the service worker serves any address from inside the preview
+frame. The engine follows route changes (`pushState`, back/forward, hash
+routes) and waits a few seconds for a step's element, since an app draws its
+page after loading.
 
 **Anchoring.** When you pick an element, the tool records a CSS selector, the
 tag, the first 40 characters of its text, and its box as a fraction of the page
@@ -237,8 +266,9 @@ origin, under `gr:review:<token>`.
 
 ## Limits
 
-- **Static HTML only.** The tool shows the files you drop as they are. A site
-  that needs a build step must be built first; drop the output folder.
+- **Front end only.** The tool shows the files you drop as they are. A site
+  that needs a build step must be built first (see *Apps* above). A back end
+  is not published.
 - **One project at a time** on the review site. Publishing the next project
   ends the previous client link.
 - **Your token and the preview share an origin.** Scripts in a project you

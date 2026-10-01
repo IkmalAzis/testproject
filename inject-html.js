@@ -30,7 +30,17 @@
       if (attrs[k]) tag += ' data-' + k + '="' + escapeAttr(attrs[k]) + '"';
     });
     if (attrs.embedded) tag += ' data-embedded';
+    if (attrs.spa) tag += ' data-spa';
     return tag + ' defer></script>';
+  }
+
+  // For an app previewed under /preview/: puts the address back to the one the
+  // app expects (/preview/about -> /about) before its scripts run, so its
+  // router finds the route. The service worker still serves the project.
+  function appAddressTag(prefix) {
+    const at = JSON.stringify(prefix.replace(/\/$/, ''));
+    return '<script>(function(p){var l=location;if(l.pathname.indexOf(p+"/")===0)' +
+      'history.replaceState(history.state,"",l.pathname.slice(p.length)+l.search+l.hash);})(' + at + ');</script>';
   }
 
   const TYPES = {
@@ -52,5 +62,5 @@
   // "my page.html" -> "my%20page.html", keeping the slashes.
   const encodePath = (path) => path.split('/').map(encodeURIComponent).join('/');
 
-  scope.GuidedReviewInject = { injectHtml, engineTag, contentType, isHtml, encodePath };
+  scope.GuidedReviewInject = { injectHtml, engineTag, appAddressTag, contentType, isHtml, encodePath };
 })(self);

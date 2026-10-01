@@ -182,9 +182,24 @@
     })();
   }
 
-  // Finds the site inside what was dropped: the folder holding the top-most
+  const BUILD_DIR = /(^|\/)(dist|build|out)\/$/i;
+
+  // The source of a React / Vue / Svelte app: browsers cannot run it as it is,
+  // which shows as a blank page. Vite's index.html loads /src/main.jsx; Create
+  // React App's public/index.html has %PUBLIC_URL% placeholders.
+  const SOURCE_SIGNS = [
+    /<script[^>]+src=["'][^"']*\/src\/[^"']+\.(jsx|tsx|ts|vue|svelte)["']/i,
+    /%PUBLIC_URL%/,
+  ];
+
+  const SOURCE_MESSAGE = 'This is the source code of a React (or Vue, Svelte…) app. Browsers cannot run it as it is, so the page would stay blank. ' +
+    'Build it first: in the app\'s folder run "npm run build". Then drop the whole folder again; the tool picks the build output ' +
+    '(dist, build or out) by itself.';
+
+  // Finds the site inside what was dropped: a build output folder (dist,
+  // build, out) if there is one, else the folder holding the top-most
   // index.html. Everything outside it, and hidden files, are left out.
-  function shapeProject(list) {
+  async function shapeProject(list) {
     const files = list.filter((f) => !IGNORED.test(f.path));
     const indexes = files
       .filter((f) => /(^|\/)index\.html?$/i.test(f.path))
@@ -192,21 +207,28 @@
     if (!indexes.length) {
       throw new Error('There is no index.html in what you dropped. Drop the folder that has the site\'s index.html in it.');
     }
-    const root = indexes[0].path.replace(/[^/]*$/, '');
+    const built = indexes.find((f) => BUILD_DIR.test(f.path.replace(/[^/]*$/, '')));
+    const index = built || indexes[0];
+    const html = await index.file.text();
+    if (SOURCE_SIGNS.some((re) => re.test(html))) throw new Error(SOURCE_MESSAGE);
+
+    const root = index.path.replace(/[^/]*$/, '');
     const inside = files
       .filter((f) => f.path.startsWith(root))
       .map((f) => ({ path: f.path.slice(root.length), file: f.file }));
-    const name = root.replace(/\/$/, '').split('/').pop() ||
-      (list[0] && list[0].path.includes('/') ? list[0].path.split('/')[0] : '') || 'project';
+    // "my-app/dist/" is called "my-app", not "dist".
+    const parts = root.replace(/\/$/, '').split('/').filter(Boolean);
+    if (parts.length > 1 && BUILD_DIR.test(parts[parts.length - 1] + '/')) parts.pop();
+    const name = parts.pop() || (list[0] && list[0].path.includes('/') ? list[0].path.split('/')[0] : '') || 'project';
     return { name, files: inside };
   }
 
   async function receiveFiles(listPromise) {
     let shaped;
     try {
-      shaped = shapeProject(await listPromise);
+      shaped = await shapeProject(await listPromise);
     } catch (e) {
-      openDialog({ title: 'That is not a site folder', body: h('p', null, e.message), actions: [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => $('dialog').close() }, 'OK')] });
+      openDialog({ title: SOURCE_MESSAGE === e.message ? 'This app needs to be built first' : 'That is not a site folder', body: h('p', null, e.message), actions: [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => $('dialog').close() }, 'OK')] });
       return;
     }
     if (project) {
@@ -293,10 +315,17 @@
     }
   }
 
+  // One HTML file, index.html: a React / Vue / Svelte style app that routes
+  // itself. Its routes ("about", "products/12") are pages of the review.
+  const isApp = () => !!project && project.pages.length === 1 && /^index\.html?$/i.test(project.pages[0]);
+
   async function loadFrame(page) {
     await swReady;
     await writeInternal('config.json', { mode: project.mode === 'client' ? 'preview-client' : 'author' });
-    $('frame').src = PREFIX + encodePath(page || 'index.html');
+    const key = page || 'index.html';
+    const hashAt = key.indexOf('#');
+    const path = hashAt < 0 ? key : key.slice(0, hashAt);
+    $('frame').src = PREFIX + encodePath(isApp() && path === 'index.html' ? '' : path) + (hashAt < 0 ? '' : key.slice(hashAt));
   }
 
   async function setMode(mode) {
@@ -314,8 +343,13 @@
 
   function currentPage() {
     try {
-      const path = $('frame').contentWindow.location.pathname;
+      const loc = $('frame').contentWindow.location;
+      const path = loc.pathname;
       if (path.startsWith(PREFIX)) return decodeURIComponent(path.slice(PREFIX.length)) || 'index.html';
+      // An app puts its own address back (/about), see appAddressTag.
+      if (isApp() && loc.href !== 'about:blank') {
+        return (decodeURIComponent(path.replace(/^\/+|\/+$/g, '')) || 'index.html') + (/^#\//.test(loc.hash) ? loc.hash : '');
+      }
     } catch (e) { /* not loaded yet */ }
     return sessionStorage.getItem(KEY.page) || 'index.html';
   }
@@ -346,6 +380,8 @@
     const keep = select.value;
     select.replaceChildren(...project.pages.map((p) => h('option', { value: p }, p)));
     if (keep) select.value = keep;
+    // An app is one page with routes: its own links move between them.
+    select.closest('.page-pick').hidden = isApp();
     $('mode-author').setAttribute('aria-pressed', String(project.mode !== 'client'));
     $('mode-client').setAttribute('aria-pressed', String(project.mode === 'client'));
     $('preview-note').hidden = project.mode !== 'client';
@@ -528,7 +564,7 @@
     const cache = await caches.open(PROJECT_CACHE);
     const requests = (await cache.keys()).filter((r) => new URL(r.url).pathname.startsWith(PREFIX));
     const encoder = new TextEncoder();
-    const tag = engineTag({ src: new URL('review.js', location.href).href, tour: '/review-tour.json' });
+    const tag = engineTag({ src: new URL('review.js', location.href).href, tour: '/review-tour.json', spa: isApp() });
     const files = {};
     let n = 0;
     for (const req of requests) {
@@ -543,6 +579,9 @@
       onProgress(++n, requests.length);
     }
     files['/review-tour.json'] = encoder.encode(JSON.stringify(tourForPublish(), null, 2) + '\n');
+    // A single-page app (one HTML file) handles its own routes like /about:
+    // let Netlify serve index.html for them, unless the project says otherwise.
+    if (isApp() && !files['/_redirects']) files['/_redirects'] = encoder.encode('/*  /index.html  200\n');
     const ownHeaders = files['/_headers'] ? new TextDecoder().decode(files['/_headers']) + '\n' : '';
     files['/_headers'] = encoder.encode(ownHeaders + '/*\n  X-Robots-Tag: noindex\n');
     return files;
