@@ -87,6 +87,9 @@ The status in the top bar tells you whether the review site is up to date:
 - On a computer, hovering a toolbar button explains what it does.
 - **This page**: *Anything about this page as a whole?*
 - Everything saves on their device as they type; closing the tab loses nothing.
+  Coming back to the link later: if they have not written anything yet, the
+  welcome card shows again; if they have, a *Welcome back* card tells them how
+  many comments are waiting to be sent and offers to continue the tour.
 - **Send feedback** asks for their name, shows a plain-text summary, and offers
   **Copy text**, **WhatsApp**, **Email** and **Download file** (JSON).
 - Forms on the site do not really send anything during the review.

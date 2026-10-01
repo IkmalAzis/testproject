@@ -1604,10 +1604,29 @@
             n > 0 && h('li', null, 'At each stop, read my note and write a comment if you have one. Leaving it empty is fine.'),
             h('li', null, 'To comment on anything else, press "Add a comment", then tap the spot on the page.'),
             h('li', null, 'For thoughts about a whole page — too long, wrong order, something missing — press "This page".'),
-            h('li', null, 'Everything is saved on this device as you go. You can stop and come back later.')),
+            h('li', null, 'No rush: you can just look around now and comment later. Everything is saved on this phone as you go. Open this same link again and you will pick up where you left off.')),
           h('p', { class: 'gr-strong' }, 'Nothing is sent to me until you press "Send feedback".'),
           h('div', { class: 'gr-row' },
-            h('button', { class: 'gr-btn gr-btn-primary gr-btn-lg', type: 'button', onclick: start }, n ? 'Start the tour' : 'Start')),
+            h('button', { class: 'gr-btn gr-btn-primary gr-btn-lg', type: 'button', onclick: start },
+              !n ? 'Start' : state.stepIndex > 0 ? 'Continue the tour' : 'Start the tour')),
+        ],
+      });
+    }
+
+    // Someone coming back who has already written something is reminded of it,
+    // and that it has not been sent yet.
+    function showWelcomeBack(total) {
+      const canTour = steps.length > 0 && !state.finished;
+      const card = openFloating({
+        title: 'Welcome back',
+        body: [
+          h('p', null, 'You have ' + plural(total, 'comment') + ' so far, saved on this phone. ' +
+            (total === 1 ? 'It has' : 'They have') + ' not been sent yet.'),
+          canTour && h('p', null, 'The tour is at stop ' + (state.stepIndex + 1) + ' of ' + steps.length + '.'),
+          h('div', { class: 'gr-row' },
+            canTour && h('button', { class: 'gr-btn gr-btn-primary', type: 'button', onclick: () => { card.close(); goStep(state.stepIndex); } }, 'Continue the tour'),
+            h('button', { class: 'gr-btn' + (canTour ? '' : ' gr-btn-primary'), type: 'button', onclick: () => { card.close(); openSummary(); } }, 'Send feedback'),
+            h('button', { class: 'gr-btn gr-btn-ghost', type: 'button', onclick: () => card.close() }, 'Keep looking')),
         ],
       });
     }
@@ -2103,8 +2122,18 @@
       state.stepIndex = clamp(state.stepIndex, 0, Math.max(steps.length - 1, 0));
       renderBar();
       renderPins();
+      // A new visit (not just moving between pages) by someone who was here before.
+      const visitKey = 'gr:visit:' + MODE;
+      const newVisit = !ss.get(visitKey);
+      ss.set(visitKey, '1');
+      const total = buildReport(exportFeedback(), tour).total;
       if (!state.welcomed) {
         showWelcome();
+      } else if (newVisit && total === 0 && !state.finished) {
+        // They only had a look last time: explain everything again.
+        showWelcome();
+      } else if (newVisit && total > 0) {
+        showWelcomeBack(total);
       } else if (state.touring && steps[state.stepIndex] && steps[state.stepIndex].page === PAGE) {
         // Wait for the page to settle before measuring and scrolling.
         setTimeout(() => showStep(true), 250);
