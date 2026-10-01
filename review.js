@@ -1014,6 +1014,19 @@
     docLayer.append(highlight, markers);
     fixedLayer.append(panel, pill);
 
+    // While a step is dragged near the top or bottom edge of the panel, the
+    // list scrolls, faster the closer to the edge, so a step can travel from
+    // the end of a long tour to the start in one drag.
+    panel.addEventListener('dragover', (e) => {
+      if (dragFrom < 0) return;
+      const r = panel.getBoundingClientRect();
+      const zone = 64;
+      const fromTop = e.clientY - r.top;
+      const fromBottom = r.bottom - e.clientY;
+      if (fromTop < zone) panel.scrollTop -= Math.ceil((zone - Math.max(fromTop, 0)) / 3);
+      else if (fromBottom < zone) panel.scrollTop += Math.ceil((zone - Math.max(fromBottom, 0)) / 3);
+    });
+
     function setCollapsed(v) {
       collapsed = v;
       ss.set(KEY.panel, v ? '1' : '0');
