@@ -46,6 +46,8 @@
     mode: 'gr:mode',
     focus: 'gr:focus',
     panel: 'gr:author:collapsed',
+    panelScroll: 'gr:author:panel-scroll',
+    activeFeedback: 'gr:author:active-feedback',
     draft: 'gr:author:draft',
     authorFeedback: 'gr:author:feedback',
     review: (token) => 'gr:review:' + token,
@@ -674,7 +676,14 @@
   host = document.createElement('guided-review');
   host.style.cssText = 'all:initial;position:absolute;top:0;left:0;width:0;height:0;z-index:2147483000;visibility:hidden;';
   const shadow = host.attachShadow({ mode: 'open' });
-  const reveal = () => { host.style.visibility = ''; };
+  // Some layout (like the author panel's scroll position) can only be restored
+  // once the styles are in.
+  let markStylesReady;
+  const stylesReady = new Promise((resolve) => { markStylesReady = resolve; });
+  const reveal = () => {
+    host.style.visibility = '';
+    markStylesReady();
+  };
   // Same for the styles: <script type="text/css" id="guided-review-css">.
   const inlineCss = document.getElementById('guided-review-css');
   let cssLink;
@@ -1040,6 +1049,8 @@
     const pageLabel = (key) => (tour.pages[key] && tour.pages[key].title) || key;
 
     function render() {
+      // Replacing the panel's content would jump it back to the top.
+      const keepScroll = panel.scrollTop;
       panel.hidden = collapsed;
       pill.hidden = !collapsed;
       pill.replaceChildren('✎ Tour · ' + plural(tour.steps.length, 'step'));
@@ -1051,8 +1062,23 @@
         settingsView(),
         actionsView(),
       ].filter(Boolean));
+      // The step editor sits at the top of the panel; show it when it is open.
+      panel.scrollTop = editing ? 0 : keepScroll;
       renderMarkers();
       layout();
+    }
+
+    let activeFeedback = ss.get(KEY.activeFeedback);
+    panel.addEventListener('scroll', () => ss.set(KEY.panelScroll, String(Math.round(panel.scrollTop))));
+
+    // Brings the feedback item last opened back into view in the panel.
+    function revealActiveFeedback() {
+      if (!activeFeedback) return;
+      const item = Array.from(panel.querySelectorAll('[data-fb]')).find((el) => el.getAttribute('data-fb') === activeFeedback);
+      if (!item) return;
+      const ir = item.getBoundingClientRect();
+      const pr = panel.getBoundingClientRect();
+      if (ir.top < pr.top + 8 || ir.bottom > pr.bottom - 8) panel.scrollTop += ir.top - pr.top - pr.height / 3;
     }
 
     function headView() {
@@ -1205,7 +1231,18 @@
         report.pages.map((p) => h('div', { class: 'gr-fb-page' + (p.key === PAGE ? ' is-here' : '') },
           h('div', { class: 'gr-fb-page-title' }, p.title, h('span', { class: 'gr-muted' }, '  ' + p.path)),
           p.overall && h('div', { class: 'gr-fb-item' }, h('span', { class: 'gr-fb-label' }, 'Overall'), h('span', { class: 'gr-quote' }, p.overall)),
-          p.items.map((it) => h('button', { class: 'gr-fb-item', type: 'button', onclick: () => showFeedbackItem(it) },
+          p.items.map((it) => h('button', {
+            class: 'gr-fb-item' + (activeFeedback === it.kind + ':' + it.id ? ' is-active' : ''),
+            type: 'button',
+            'data-fb': it.kind + ':' + it.id,
+            onclick: (e) => {
+              activeFeedback = it.kind + ':' + it.id;
+              ss.set(KEY.activeFeedback, activeFeedback);
+              panel.querySelectorAll('.gr-fb-item.is-active').forEach((x) => x.classList.remove('is-active'));
+              e.currentTarget.classList.add('is-active');
+              showFeedbackItem(it);
+            },
+          },
             h('span', { class: 'gr-fb-label' }, it.kind === 'step' ? 'Step ' + it.n + ' — "' + it.title + '"' : 'Free pin — ' + it.label +
               (it.pin.anchor ? '' : ' (no position in text summary)')),
             h('span', { class: 'gr-quote' }, it.text))))),
@@ -1388,6 +1425,8 @@
 
     function closeFeedback() {
       feedback = null;
+      activeFeedback = null;
+      ss.del(KEY.activeFeedback);
       ls.del(KEY.authorFeedback);
       closeFloating();
       render();
@@ -1511,6 +1550,11 @@
 
     layoutFn = layout;
     render();
+    // Coming from another page: carry on where the panel was.
+    stylesReady.then(() => requestAnimationFrame(() => {
+      if (!editing) panel.scrollTop = Number(ss.get(KEY.panelScroll)) || 0;
+      revealActiveFeedback();
+    }));
 
     // Arriving from "edit"/"show" on another page.
     const focus = ss.get(KEY.focus);
