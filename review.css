@@ -73,6 +73,43 @@
   outline-style: dashed;
 }
 
+/* Several elements in one step: one dim layer with holes, an outline each. */
+.gr-multi {
+  z-index: 1;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.gr-multi > * {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.gr-multi-dim {
+  display: block;
+  overflow: visible;
+}
+
+.gr-multi-dim path {
+  fill: var(--gr-dim);
+}
+
+.gr-spot.is-multi {
+  box-shadow: none;
+  transition: none;
+}
+
+.gr-hl-more {
+  width: 0;
+  height: 0;
+}
+
+.gr-hl-more > .gr-hl {
+  position: absolute;
+}
+
 .gr-hl,
 .gr-hover,
 .gr-flash {
@@ -147,6 +184,13 @@
   height: 28px;
   background: var(--gr-pin);
   color: #fff;
+}
+
+.gr-marker.is-extra {
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  opacity: 0.85;
 }
 
 .gr-marker.is-lost {
@@ -1014,6 +1058,25 @@ p {
 
 .gr-editor .gr-row {
   margin-top: 10px;
+}
+
+.gr-editor-els {
+  margin: 0 0 10px;
+  padding-left: 22px;
+  font-size: 13px;
+}
+
+.gr-editor-els li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gr-editor-els .gr-icon-btn {
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
 }
 
 .gr-counter {

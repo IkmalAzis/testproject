@@ -50,6 +50,9 @@ Change or disconnect this later with **Netlify…** in the top bar.
    - **+ Pick an element**, click it, write one or two sentences (soft limit
      200 characters). **Select wider** steps out to the element around the one
      you clicked.
+   - **+ Add another element** puts several things under one note, e.g.
+     three logos that need the same fix. The client sees all of them
+     highlighted at once, and the step is named after all of them.
    - Drag steps to reorder them. ✎ edits, × deletes.
    - **Tour settings**: site name for the summary, and optionally your
      WhatsApp number and email for the client's send buttons.

@@ -192,6 +192,7 @@
   //     pages: { [pageKey]: { path, title } },
   //     steps: [ { id, page, path, title, note, anchor } ] }
   //   page and path are both the page key, e.g. "about.html".
+  //   extra: more anchors highlighted together with `anchor` (optional).
   //
   // Anchor:
   //   { selector, tag, text, fx, fy, fw, fh }   (f* = fractions of page size)
@@ -240,6 +241,8 @@
           title: String(s.title || ''),
           note: String(s.note || ''),
           anchor: s.anchor,
+          // More elements shown together with the first one (e.g. a row of logos).
+          extra: Array.isArray(s.extra) ? s.extra.filter(validAnchor) : [],
         })),
     };
   }
@@ -1107,6 +1110,14 @@
     return { x: r.x + off.x * r.w, y: r.y + off.y * r.h, status: res.status };
   }
 
+  function unionRect(rects) {
+    const x = Math.min(...rects.map((r) => r.x));
+    const y = Math.min(...rects.map((r) => r.y));
+    return { x, y, w: Math.max(...rects.map((r) => r.x + r.w)) - x, h: Math.max(...rects.map((r) => r.y + r.h)) - y };
+  }
+
+  const stepAnchors = (s) => [s.anchor].concat(s.extra || []);
+
   function flash(rect) {
     const box = h('div', { class: 'gr-flash' });
     docLayer.append(box);
@@ -1173,7 +1184,8 @@
     const pill = h('button', { class: 'gr-pill', type: 'button', onclick: () => setCollapsed(false) });
     const markers = h('div', { class: 'gr-markers' });
     const highlight = h('div', { class: 'gr-hl', hidden: true });
-    docLayer.append(highlight, markers);
+    const moreHighlights = h('div', { class: 'gr-hl-more' });
+    docLayer.append(highlight, moreHighlights, markers);
     fixedLayer.append(panel, pill);
 
     // While a step is dragged near the top or bottom edge of the panel, the
@@ -1284,9 +1296,14 @@
 
       const res = editing.el ? null : resolveAnchor(s.anchor);
       const clientSaid = feedback && feedback.stepComments[s.id];
+      const all = stepAnchors(s);
+      const describe = (a) => '<' + a.tag + '> ' + (a.text ? '"' + shorten(a.text, 30) + '"' : '');
       return h('div', { class: 'gr-editor' },
         h('div', { class: 'gr-editor-title' }, (editing.isNew ? 'New step ' : 'Step ') + n,
-          h('span', { class: 'gr-muted' }, '  <' + s.anchor.tag + '> ' + (s.anchor.text ? '"' + shorten(s.anchor.text, 30) + '"' : ''))),
+          h('span', { class: 'gr-muted' }, '  ' + (all.length > 1 ? plural(all.length, 'element') + ', shown together' : describe(s.anchor)))),
+        all.length > 1 && h('ol', { class: 'gr-editor-els' }, all.map((a, i) => h('li', null,
+          h('span', null, describe(a)),
+          h('button', { class: 'gr-icon-btn', type: 'button', title: 'Remove from this step', 'aria-label': 'Remove ' + describe(a), onclick: () => removeElement(i) }, '×')))),
         res && res.status !== 'ok' && h('p', { class: 'gr-warn' }, res.status === 'hidden'
           ? 'This element is hidden right now. Saving keeps the old position.'
           : 'This element is no longer on the page. Delete the step and pick again.'),
@@ -1298,8 +1315,9 @@
         counter,
         h('div', { class: 'gr-row' },
           save,
-          editing.el && editing.el.parentElement && editing.el.parentElement !== document.body &&
+          all.length === 1 && editing.el && editing.el.parentElement && editing.el.parentElement !== document.body &&
             h('button', { class: 'gr-btn', type: 'button', title: 'Select the element around this one', onclick: widen }, 'Select wider'),
+          h('button', { class: 'gr-btn', type: 'button', title: 'Highlight another element together with this one, under the same note', onclick: addElement }, '+ Add another element'),
           h('button', { class: 'gr-btn', type: 'button', onclick: cancelEditor }, 'Cancel'),
           !editing.isNew && h('button', { class: 'gr-btn gr-btn-danger', type: 'button', onclick: () => deleteStep(s) }, 'Delete')));
     }
@@ -1462,7 +1480,8 @@
           editing = {
             isNew: true,
             el,
-            step: { id: uid('s'), page: PAGE, path: PAGE, title: '', note: '', anchor: recordAnchor(el) },
+            extraEls: [],
+            step: { id: uid('s'), page: PAGE, path: PAGE, title: '', note: '', anchor: recordAnchor(el), extra: [] },
           };
           render();
         },
@@ -1475,11 +1494,12 @@
         location.href = pageUrl(s.page);
         return;
       }
-      const res = resolveAnchor(s.anchor);
-      scrollRectIntoView(res.rect);
-      flash(res.rect);
+      const results = stepAnchors(s).map(resolveAnchor);
+      scrollRectIntoView(unionRect(results.map((r) => r.rect)));
+      results.forEach((r) => flash(r.rect));
       if (edit) {
-        editing = { isNew: false, el: res.status === 'unanchored' ? null : res.el, step: s };
+        const found = (r) => (r.status === 'unanchored' ? null : r.el);
+        editing = { isNew: false, el: found(results[0]), extraEls: results.slice(1).map(found), step: s };
         render();
       }
     }
@@ -1490,9 +1510,17 @@
       const s = editing.step;
       s.note = note;
       const el = editing.el && editing.el.isConnected ? editing.el : null;
-      if (el) {
-        // Re-recording heals a step that was only found by its text.
-        if (docRect(el).w > 0) s.anchor = recordAnchor(el);
+      const extraEls = editing.extraEls || [];
+      // Re-recording heals a step that was only found by its text.
+      if (el && docRect(el).w > 0) s.anchor = recordAnchor(el);
+      s.extra = (s.extra || []).map((a, i) => {
+        const x = extraEls[i];
+        return x && x.isConnected && docRect(x).w > 0 ? recordAnchor(x) : a;
+      });
+      if (el && s.extra.length) {
+        // Several elements: name them all, e.g. "Cargoflow, Eng Kong Depot, Affin Moneybrokers".
+        s.title = shorten([el].concat(extraEls.filter(Boolean)).map((x) => shorten(titleFor(x, ''), 28)).join(', '), 70);
+      } else if (el) {
         s.title = titleFor(el, note);
       } else if (!s.title) {
         s.title = shorten(note, 50);
@@ -1510,6 +1538,38 @@
       if (!parent || parent === document.body) return;
       editing.el = parent;
       editing.step.anchor = recordAnchor(parent);
+      render();
+    }
+
+    // One note for several things at once, e.g. three logos that need the same fix.
+    function addElement() {
+      panel.classList.add('is-picking');
+      startPicking({
+        hover: true,
+        message: 'Click another element for this step. Esc to stop.',
+        onCancel: () => panel.classList.remove('is-picking'),
+        onPick: (el) => {
+          panel.classList.remove('is-picking');
+          if (!editing) return;
+          editing.extraEls = (editing.extraEls || []).concat(el);
+          editing.step.extra = (editing.step.extra || []).concat(recordAnchor(el));
+          render();
+        },
+      });
+    }
+
+    function removeElement(i) {
+      const s = editing.step;
+      const els = editing.extraEls || [];
+      if (i === 0) {
+        if (!s.extra.length) return;
+        s.anchor = s.extra.shift();
+        editing.el = els.shift() || null;
+      } else {
+        s.extra.splice(i - 1, 1);
+        els.splice(i - 1, 1);
+      }
+      editing.extraEls = els;
       render();
     }
 
@@ -1675,6 +1735,21 @@
           badge.classList.toggle('is-lost', res.status !== 'ok');
           placeAt(badge, Math.max(res.rect.x - 12, 2), Math.max(res.rect.y - 12, 2));
         });
+        (s.extra || []).forEach((a) => {
+          const more = h('button', {
+            class: 'gr-marker is-extra',
+            type: 'button',
+            title: 'Step ' + stepNumber(s) + ' (shown together): ' + s.note,
+            'aria-label': 'Edit step ' + stepNumber(s),
+            onclick: () => goToStep(s, true),
+          }, String(stepNumber(s)));
+          markers.append(more);
+          markerRefs.push(() => {
+            const res = resolveAnchor(a);
+            more.classList.toggle('is-lost', res.status !== 'ok');
+            placeAt(more, Math.max(res.rect.x - 10, 2), Math.max(res.rect.y - 10, 2));
+          });
+        });
       });
 
       if (!feedback) return;
@@ -1697,15 +1772,22 @@
 
     function layout() {
       markerRefs.forEach((update) => update());
-      let rect = null;
+      let rects = [];
       if (editing) {
-        rect = editing.el && editing.el.isConnected ? docRect(editing.el) : resolveAnchor(editing.step.anchor).rect;
+        const els = [editing.el].concat(editing.extraEls || []);
+        rects = stepAnchors(editing.step).map((a, i) => (els[i] && els[i].isConnected ? docRect(els[i]) : resolveAnchor(a).rect));
       } else if (hoverStepId) {
         const s = stepsHere().find((x) => x.id === hoverStepId);
-        if (s) rect = resolveAnchor(s.anchor).rect;
+        if (s) rects = stepAnchors(s).map((a) => resolveAnchor(a).rect);
       }
-      highlight.hidden = !rect;
-      if (rect) placeAt(highlight, rect.x - 4, rect.y - 4, rect.w + 8, rect.h + 8);
+      highlight.hidden = !rects.length;
+      if (rects.length) placeAt(highlight, rects[0].x - 4, rects[0].y - 4, rects[0].w + 8, rects[0].h + 8);
+      moreHighlights.replaceChildren();
+      rects.slice(1).forEach((r) => {
+        const box = h('div', { class: 'gr-hl' });
+        moreHighlights.append(box);
+        placeAt(box, r.x - 4, r.y - 4, r.w + 8, r.h + 8);
+      });
     }
 
     layoutFn = () => {
@@ -1765,13 +1847,15 @@
     let pinsNeedRender = true;
 
     const spot = h('div', { class: 'gr-spot', hidden: true });
+    const multi = h('div', { class: 'gr-multi', hidden: true }); // several elements: outlines + one dim layer
     const runway = h('div', { class: 'gr-runway', hidden: true });
     const pinLayer = h('div', { class: 'gr-markers' });
     const bar = h('div', { class: 'gr-bar', role: 'toolbar', 'aria-label': 'Review tools' });
     let tip = null;
     let tipWarn = null;
+    let tipPlaces = null; // "3 places are highlighted…" for a step with several elements
     barEl = bar;
-    docLayer.append(spot, runway, pinLayer);
+    docLayer.append(spot, multi, runway, pinLayer);
     fixedLayer.append(bar);
 
     function registerPage() {
@@ -1910,6 +1994,7 @@
     function hideStep() {
       tipVisible = false;
       spot.hidden = true;
+      multi.hidden = true;
       runway.hidden = true;
       if (tip) tip.remove();
       tip = null;
@@ -1963,6 +2048,7 @@
       ta.value = fb.stepComments[s.id] || '';
       requestAnimationFrame(fit);
       tipWarn = h('p', { class: 'gr-warn', hidden: true });
+      tipPlaces = h('p', { class: 'gr-hint gr-places', hidden: true });
 
       const el = h('div', { class: 'gr-tip', role: 'dialog', 'aria-label': 'Tour stop ' + (i + 1) + ' of ' + n },
         h('div', { class: 'gr-tip-head' },
@@ -1979,6 +2065,7 @@
           h('button', { class: 'gr-icon-btn', type: 'button', title: 'Pause the tour', 'aria-label': 'Pause the tour', onclick: pauseTour }, '×')),
         h('div', { class: 'gr-tip-body' },
           h('p', { class: 'gr-note' }, s.note),
+          tipPlaces,
           tipWarn,
           h('label', { class: 'gr-field' }, h('span', { class: 'gr-label' }, 'Your comment (optional)'), ta),
           next && next.page !== s.page && h('p', { class: 'gr-hint' }, 'The next stop is on the ' + pageName(next.page) + ' page.')),
@@ -1990,6 +2077,31 @@
       head.title = 'Drag to move this note';
       head.addEventListener('pointerdown', (e) => dragTip(e, el, head));
       return el;
+    }
+
+    // Several elements at once: one dimmed layer with a hole for each, and an
+    // outline around each.
+    function drawMulti(boxes, results, doc) {
+      const W = Math.max(doc.w, document.documentElement.scrollWidth);
+      const H = doc.h + window.innerHeight; // also covers the scroll room below the page
+      const svgNS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(svgNS, 'svg');
+      svg.setAttribute('width', W);
+      svg.setAttribute('height', H);
+      svg.setAttribute('class', 'gr-multi-dim');
+      const path = document.createElementNS(svgNS, 'path');
+      path.setAttribute('fill-rule', 'evenodd');
+      path.setAttribute('d', 'M0 0H' + W + 'V' + H + 'H0Z' + boxes.map((b) =>
+        'M' + Math.round(b.x) + ' ' + Math.round(b.y) + 'h' + Math.round(b.w) + 'v' + Math.round(b.h) + 'h' + -Math.round(b.w) + 'Z').join(''));
+      svg.append(path);
+      multi.replaceChildren(svg);
+      boxes.forEach((b, i) => {
+        const outline = h('div', { class: 'gr-spot is-multi' + (results[i].status !== 'ok' ? ' is-lost' : '') });
+        Object.assign(outline.style, { left: Math.round(b.x) + 'px', top: Math.round(b.y) + 'px', width: Math.round(b.w) + 'px', height: Math.round(b.h) + 'px' });
+        multi.append(outline);
+      });
+      placeAt(multi, 0, 0);
+      multi.hidden = false;
     }
 
     // On a computer the note can be dragged by its top bar, e.g. off a logo
@@ -2051,22 +2163,42 @@
     function positionStep(scroll) {
       if (!tipVisible || !tip) return;
       const s = steps[state.stepIndex];
-      const res = resolveAnchor(s.anchor);
+      const results = stepAnchors(s).map(resolveAnchor);
+      const res = results[0];
       const pad = 6;
-      const R = { x: res.rect.x - pad, y: res.rect.y - pad, w: res.rect.w + pad * 2, h: res.rect.h + pad * 2 };
+      const boxes = results.map((r) => ({ x: r.rect.x - pad, y: r.rect.y - pad, w: r.rect.w + pad * 2, h: r.rect.h + pad * 2 }));
+      // The note is placed against the area that holds all of them.
+      const R = unionRect(boxes);
+      const doc = measureDoc();
 
-      spot.classList.toggle('is-lost', res.status !== 'ok');
-      placeAt(spot, R.x, R.y, R.w, R.h);
-      spot.hidden = false;
+      if (boxes.length === 1) {
+        multi.hidden = true;
+        spot.classList.toggle('is-lost', res.status !== 'ok');
+        placeAt(spot, R.x, R.y, R.w, R.h);
+        spot.hidden = false;
+      } else {
+        spot.hidden = true;
+        drawMulti(boxes, results, doc);
+      }
 
-      tipWarn.hidden = res.status === 'ok';
-      tipWarn.textContent = res.status === 'hidden'
-        ? 'This part is hidden right now — it may be inside a menu or a closed section. The box shows roughly where it is.'
-        : 'This part of the page has changed since I wrote this note, so the box only shows roughly where it was.';
+      // Several elements may not all fit on screen (a phone stacks them): say so.
+      tipPlaces.hidden = boxes.length < 2;
+      if (boxes.length > 1) {
+        const room = window.innerHeight - topInset() - barSpace() - (isPhone() ? tip.offsetHeight : 0);
+        tipPlaces.textContent = boxes.length + ' places are highlighted on this page' +
+          (R.h > room ? '. Scroll to see them all.' : '.');
+      }
+
+      const lost = results.filter((r) => r.status !== 'ok');
+      tipWarn.hidden = !lost.length;
+      tipWarn.textContent = results.length > 1
+        ? 'Some of these parts have changed or are hidden right now, so their boxes only show roughly where they are.'
+        : res.status === 'hidden'
+          ? 'This part is hidden right now — it may be inside a menu or a closed section. The box shows roughly where it is.'
+          : 'This part of the page has changed since I wrote this note, so the box only shows roughly where it was.';
 
       // Extra scroll room at the bottom, so the last elements can still be
       // brought above the tooltip.
-      const doc = measureDoc();
       placeAt(runway, 0, doc.h, 1, window.innerHeight * 0.8);
       runway.hidden = false;
 
