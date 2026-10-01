@@ -348,6 +348,7 @@
     if (keep) select.value = keep;
     $('mode-author').setAttribute('aria-pressed', String(project.mode !== 'client'));
     $('mode-client').setAttribute('aria-pressed', String(project.mode === 'client'));
+    $('preview-note').hidden = project.mode !== 'client';
     $('copy-link').disabled = !project.publishedAt || !netlify;
     renderStatus();
   }
@@ -370,7 +371,10 @@
     $('empty').hidden = !!project;
     $('work').hidden = !project;
     $('bar').hidden = !project;
-    if (!project) return;
+    if (!project) {
+      $('preview-note').hidden = true;
+      return;
+    }
     renderBar();
     await loadFrame(sessionStorage.getItem(KEY.page) || 'index.html');
   }

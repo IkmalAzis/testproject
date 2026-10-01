@@ -409,6 +409,180 @@ p {
   color: #fff;
 }
 
+.gr-toast-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* With the pin demo the toast is taller; clicks pass through it to the page,
+   except on its Cancel button. */
+.gr-toast.has-demo {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 12px;
+  pointer-events: none;
+}
+
+.gr-toast.has-demo .gr-btn {
+  pointer-events: auto;
+}
+
+/* --- pin demo: pointer moves in, clicks, a pin and a comment appear ----------- */
+
+.gr-demo {
+  position: relative;
+  width: 232px;
+  height: 116px;
+  margin: 0 auto;
+}
+
+.gr-demo-page {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.gr-demo-line,
+.gr-demo-block {
+  position: absolute;
+  left: 16px;
+  height: 7px;
+  border-radius: 4px;
+  background: #e2e8f0;
+}
+
+.gr-demo-line.w1 { top: 16px; width: 120px; height: 10px; background: #cbd5e1; }
+.gr-demo-line.w2 { top: 34px; width: 170px; }
+.gr-demo-line.w3 { top: 92px; width: 150px; }
+
+.gr-demo-block {
+  top: 50px;
+  width: 92px;
+  height: 28px;
+  border-radius: 6px;
+  background: #bfdbfe;
+}
+
+.gr-demo-ripple,
+.gr-demo-pin {
+  position: absolute;
+  top: 53px;
+  left: 77px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+}
+
+.gr-demo-ripple {
+  border: 2px solid var(--gr-pin);
+  opacity: 0;
+  animation: gr-demo-ripple 3.6s ease-out infinite;
+}
+
+.gr-demo-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  background: var(--gr-pin);
+  color: #fff;
+  font: 700 11px/1 system-ui, sans-serif;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.3);
+  transform: scale(0);
+  animation: gr-demo-pin 3.6s ease-out infinite;
+}
+
+.gr-demo-bubble {
+  position: absolute;
+  top: 44px;
+  left: 112px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 104px;
+  padding: 8px;
+  border-left: 3px solid var(--gr-pin);
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+  opacity: 0;
+  animation: gr-demo-bubble 3.6s ease-out infinite;
+}
+
+.gr-demo-bubble i {
+  height: 5px;
+  border-radius: 3px;
+  background: #cbd5e1;
+}
+
+.gr-demo-bubble i + i {
+  width: 60%;
+}
+
+.gr-demo-pointer,
+.gr-demo-finger {
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: gr-demo-move 3.6s ease-in-out infinite;
+}
+
+.gr-demo-pointer svg {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.35));
+}
+
+/* On touch screens a fingertip instead of a mouse pointer. */
+.gr-demo-finger {
+  display: none;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+@media (hover: none) {
+  .gr-demo-pointer { display: none; }
+  .gr-demo-finger { display: block; }
+}
+
+@keyframes gr-demo-move {
+  0% { transform: translate(206px, 104px); opacity: 0; }
+  10% { opacity: 1; }
+  38% { transform: translate(88px, 64px) scale(1); }
+  44% { transform: translate(88px, 64px) scale(0.82); }
+  50% { transform: translate(88px, 64px) scale(1); }
+  62% { transform: translate(100px, 92px); opacity: 1; }
+  88% { transform: translate(100px, 92px); opacity: 1; }
+  100% { transform: translate(100px, 92px); opacity: 0; }
+}
+
+@keyframes gr-demo-ripple {
+  0%, 43% { opacity: 0; transform: scale(0.4); }
+  46% { opacity: 0.9; transform: scale(0.6); }
+  62%, 100% { opacity: 0; transform: scale(2); }
+}
+
+@keyframes gr-demo-pin {
+  0%, 46% { transform: scale(0); opacity: 1; }
+  54% { transform: scale(1.2); }
+  60% { transform: scale(1); }
+  90% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+@keyframes gr-demo-bubble {
+  0%, 60% { opacity: 0; transform: translateY(6px); }
+  70%, 90% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(0); }
+}
+
 /* --- cards: modal, sheet and popover -------------------------------------------- */
 
 .gr-backdrop {
@@ -915,6 +1089,55 @@ button.gr-fb-item:hover {
   margin-top: 8px;
 }
 
+/* A short explanation above each toolbar button, on hover or keyboard focus. */
+@media (hover: hover) {
+  .gr-bar-btn[data-tip]::before {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 14px);
+    left: 50%;
+    z-index: 1;
+    width: max-content;
+    max-width: 230px;
+    padding: 8px 11px;
+    border-radius: 8px;
+    background: var(--gr-ink);
+    color: #fff;
+    font: 500 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    text-align: center;
+    white-space: normal;
+    box-shadow: var(--gr-shadow);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 4px);
+    transition: opacity 0.15s, transform 0.15s;
+  }
+
+  .gr-bar-btn[data-tip]:hover::before,
+  .gr-bar-btn[data-tip]:focus-visible::before {
+    opacity: 1;
+    transform: translate(-50%, 0);
+    transition-delay: 0.25s;
+  }
+
+  .gr-bar-btn.is-primary[data-tip]::before {
+    left: auto;
+    right: 0;
+    transform: translate(0, 4px);
+  }
+
+  .gr-bar-btn.is-primary[data-tip]:hover::before,
+  .gr-bar-btn.is-primary[data-tip]:focus-visible::before {
+    transform: translate(0, 0);
+  }
+}
+
+/* Share buttons switched off in the tool's client view. */
+.gr-btn.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 /* --- phone ------------------------------------------------------------------------------ */
 
 @media (max-width: 699px) {
@@ -1049,5 +1272,27 @@ button.gr-fb-item:hover {
 
   .gr-flash {
     animation: none;
+  }
+
+  /* The demo holds still on its last frame: pointer on the spot, pin, comment. */
+  .gr-demo-pointer,
+  .gr-demo-finger,
+  .gr-demo-pin,
+  .gr-demo-bubble,
+  .gr-demo-ripple {
+    animation: none;
+  }
+
+  .gr-demo-pointer,
+  .gr-demo-finger {
+    transform: translate(100px, 92px);
+  }
+
+  .gr-demo-pin {
+    transform: none;
+  }
+
+  .gr-demo-bubble {
+    opacity: 1;
   }
 }

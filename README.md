@@ -55,7 +55,9 @@ Change or disconnect this later with **Netlify…** in the top bar.
      WhatsApp number and email for the client's send buttons.
    - The tour saves as you go.
 3. **Client view** in the top bar shows exactly what the client will get,
-   starting fresh each time you switch to it.
+   starting fresh each time you switch to it. A strip under the bar reminds
+   you it is a test: nothing typed there is sent, and the send buttons in the
+   summary are switched off.
 4. **Publish.** The tool uploads the project, the tour, and one `<script>` tag
    on every page to your review site. Only files Netlify does not already have
    are uploaded, so publishing again after editing the tour takes seconds.
@@ -80,7 +82,9 @@ The status in the top bar tells you whether the review site is up to date:
   with **Previous / Next**, a counter (`3 / 12`) and an optional comment box.
   The note never covers the element, and a fixed site header never hides it.
   On a phone the note is a sheet above the toolbar and can be folded down.
-- **Add a comment**: tap anywhere on the page and type.
+- **Add a comment**: tap anywhere on the page and type. The first time, a
+  short animation shows a pointer (a fingertip on phones) dropping a pin.
+- On a computer, hovering a toolbar button explains what it does.
 - **This page**: *Anything about this page as a whole?*
 - Everything saves on their device as they type; closing the tab loses nothing.
 - **Send feedback** asks for their name, shows a plain-text summary, and offers

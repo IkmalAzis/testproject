@@ -100,6 +100,8 @@
   if (!MODE) return;
   window.__guidedReview = true;
   const IS_AUTHOR = MODE === 'author';
+  // The tool's "Client view": the real client UI, but nothing typed is sent.
+  const IS_PREVIEW = CONFIG.embedded && !IS_AUTHOR;
 
   // --- small helpers --------------------------------------------------------
 
@@ -646,6 +648,21 @@
     download: '<path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/>',
   };
 
+  // A few seconds of "move here, click, a pin appears", shown the first time
+  // someone adds a comment. Pure CSS animation; it never takes clicks.
+  function pinDemo() {
+    const el = h('div', { class: 'gr-demo', 'aria-hidden': 'true' });
+    el.innerHTML =
+      '<div class="gr-demo-page">' +
+        '<i class="gr-demo-line w1"></i><i class="gr-demo-line w2"></i><i class="gr-demo-block"></i><i class="gr-demo-line w3"></i>' +
+        '<span class="gr-demo-ripple"></span><span class="gr-demo-pin">1</span>' +
+        '<span class="gr-demo-bubble"><i></i><i></i></span>' +
+      '</div>' +
+      '<span class="gr-demo-pointer"><svg viewBox="0 0 16 22" width="16" height="22"><path d="M1 1v17l4.5-4.2 3 6.7 2.8-1.3-3-6.6H14z" fill="#fff" stroke="#0f172a" stroke-width="1.4" stroke-linejoin="round"/></svg></span>' +
+      '<span class="gr-demo-finger"></span>';
+    return el;
+  }
+
   function icon(name) {
     const span = h('span', { class: 'gr-ico', 'aria-hidden': 'true' });
     // Static markup from ICONS only; never user text.
@@ -741,9 +758,10 @@
     opts = opts || {};
     clearTimeout(toastTimer);
     if (toastEl) toastEl.remove();
-    const el = h('div', { class: 'gr-toast', role: 'status' },
+    const row = h('div', { class: 'gr-toast-row' },
       h('span', null, message),
       opts.action && h('button', { class: 'gr-btn gr-btn-small', type: 'button', onclick: opts.action.onClick }, opts.action.label));
+    const el = h('div', { class: 'gr-toast' + (opts.demo ? ' has-demo' : ''), role: 'status' }, opts.demo, row);
     fixedLayer.append(el);
     toastEl = el;
     const close = () => {
@@ -839,7 +857,7 @@
     const root = document.documentElement;
     const prevCursor = root.style.cursor;
     root.style.cursor = 'crosshair';
-    const closeToast = toast(opts.message, { sticky: true, action: { label: 'Cancel', onClick: () => finish(true) } });
+    const closeToast = toast(opts.message, { sticky: true, demo: opts.demo, action: { label: 'Cancel', onClick: () => finish(true) } });
 
     const inUi = (e) => e.composedPath().includes(host);
     const block = (e) => {
@@ -1492,6 +1510,7 @@
       touring: !!saved.touring,
       finished: !!saved.finished,
       stepIndex: Number(saved.stepIndex) || 0,
+      pinDemoSeen: !!saved.pinDemoSeen,
       fb: Object.assign(emptyFeedback(), saved.fb || {}),
     };
     const fb = state.fb;
@@ -1528,6 +1547,7 @@
         type: 'button',
         'aria-pressed': opts.pressable ? String(!!opts.active) : null,
         'aria-label': opts.aria || label,
+        'data-tip': opts.tip,
         onclick: opts.onClick,
       }, icon(name), h('span', { class: 'gr-bar-label' }, label));
     }
@@ -1539,11 +1559,21 @@
           active: tipVisible,
           pressable: true,
           aria: tipVisible ? 'Hide the tour' : 'Show the tour, step ' + (state.stepIndex + 1) + ' of ' + n,
+          tip: tipVisible ? 'Hide the tour for now. You can come back to it any time.' : 'Walk through the parts I would like you to check.',
           onClick: () => (tipVisible ? pauseTour() : goStep(state.stepIndex)),
         }),
-        barButton('pin', 'Add a comment', { active: pinning, onClick: startPin }),
-        barButton('page', 'This page', { dot: hasText(fb.pageComments[PAGE]), aria: 'Comment on this page as a whole', onClick: openPageBox }),
-        barButton('send', 'Send feedback', { primary: true, onClick: openSummary }),
+        barButton('pin', 'Add a comment', {
+          active: pinning,
+          tip: 'Click anywhere on the page to pin a comment to that spot.',
+          onClick: startPin,
+        }),
+        barButton('page', 'This page', {
+          dot: hasText(fb.pageComments[PAGE]),
+          aria: 'Comment on this page as a whole',
+          tip: 'Write about this page as a whole: too long, wrong order, something missing.',
+          onClick: openPageBox,
+        }),
+        barButton('send', 'Send feedback', { primary: true, tip: 'See all your comments and send them to me.', onClick: openSummary }),
       ].filter(Boolean));
     }
 
@@ -1828,8 +1858,14 @@
       closeFloating();
       pinning = true;
       renderBar();
+      const firstTime = !state.pinDemoSeen;
+      if (firstTime) {
+        state.pinDemoSeen = true;
+        save();
+      }
       startPicking({
         hover: false,
+        demo: firstTime ? pinDemo() : null,
         message: isPhone() ? 'Tap the spot you want to comment on.' : 'Click the spot you want to comment on.',
         onPick: (el, e) => {
           pinning = false;
@@ -2023,10 +2059,19 @@
         count.textContent = report.total
           ? plural(report.total, 'comment') + ' across ' + plural(report.pages.length, 'page') + '.'
           : 'You have not written any comments yet.';
+        if (IS_PREVIEW) return;
         wa.href = links.whatsapp;
         mail.href = links.email;
       }
       refresh();
+      if (IS_PREVIEW) {
+        [copy, dl].forEach((b) => { b.disabled = true; });
+        [wa, mail].forEach((a) => {
+          a.classList.add('is-disabled');
+          a.setAttribute('aria-disabled', 'true');
+          a.addEventListener('click', (e) => e.preventDefault());
+        });
+      }
 
       openFloating({
         title: 'Send your feedback',
@@ -2037,7 +2082,9 @@
           h('div', { class: 'gr-field' },
             h('span', { class: 'gr-label' }, 'Send them to me with any one of these'),
             h('div', { class: 'gr-share-grid' }, copy, wa, mail, dl)),
-          h('p', { class: 'gr-hint' }, 'Nothing is sent automatically. Your comments stay saved on this device, so you can close this and add more later.'),
+          IS_PREVIEW
+            ? h('p', { class: 'gr-warn' }, 'Preview only. In your client’s link, these buttons send the feedback to you. Here they are switched off, and nothing you typed is sent anywhere.')
+            : h('p', { class: 'gr-hint' }, 'Nothing is sent automatically. Your comments stay saved on this device, so you can close this and add more later.'),
         ],
       });
     }
