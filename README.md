@@ -66,6 +66,8 @@ Change or disconnect this later with **Netlify…** in the top bar.
    when you publish the same project again.
 6. When feedback arrives, press **Load feedback** in the tour panel and open
    the file, or paste the text the client sent. Comments appear in place.
+   The text summary ends with a *Pin positions* line, so free pins pasted in
+   as text land exactly where the client put them.
 7. **Next project:** drop the next folder. The tool asks before replacing the
    current one. The review site keeps the old project until you publish.
 
@@ -87,6 +89,12 @@ The status in the top bar tells you whether the review site is up to date:
 - **Add a comment**: tap anywhere on the page and type. The first time, a
   short animation shows a pointer (a fingertip on phones) dropping a pin.
 - On a computer, hovering a toolbar button explains what it does.
+- On a computer, the toolbar can be dragged by its ⋮⋮ handle and stays where
+  it is put; double-click the handle to put it back. The author's Tour builder
+  panel moves the same way, by its title bar.
+- While pinning, a see-through layer takes the tap, so nothing on the page
+  reacts (links, buttons, embedded maps). Pins are labelled by the nearest
+  thing with text: *on "Send" button*, *right of "Send" button*.
 - **This page**: *Anything about this page as a whole?*
 - Everything saves on their device as they type; closing the tab loses nothing.
   Coming back to the link later: if they have not written anything yet, the

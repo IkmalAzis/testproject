@@ -381,6 +381,15 @@ p {
   margin: 0 0 12px;
 }
 
+/* Catches the click while picking an element or a spot. */
+.gr-pick-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 24;
+  cursor: crosshair;
+  background: transparent;
+}
+
 /* --- toast -------------------------------------------------------------------- */
 
 .gr-toast {
@@ -402,7 +411,14 @@ p {
   transform: translateX(-50%);
 }
 
+/* Clicks go through a toast to the page (it often sits over a site's menu),
+   except on its button. */
+.gr-toast {
+  pointer-events: none;
+}
+
 .gr-toast .gr-btn {
+  pointer-events: auto;
   flex: none;
   border-color: rgba(255, 255, 255, 0.3);
   background: transparent;
@@ -818,6 +834,35 @@ p {
 
 /* --- reviewer: toolbar -------------------------------------------------------------- */
 
+/* Moved by the client (computers only). */
+.gr-bar.is-free {
+  bottom: auto;
+  transform: none;
+}
+
+.gr-bar-grip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 2px 0 8px;
+  color: #94a3b8;
+  font-size: 13px;
+  letter-spacing: -3px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.gr-bar.is-dragging,
+.gr-panel.is-dragging {
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.35), 0 2px 6px rgba(15, 23, 42, 0.1);
+}
+
+.gr-bar.is-dragging .gr-bar-grip,
+.gr-panel.is-dragging .gr-panel-head {
+  cursor: grabbing;
+}
+
 .gr-bar {
   position: fixed;
   bottom: 16px;
@@ -914,7 +959,16 @@ p {
   cursor: pointer;
 }
 
+.gr-panel.is-free {
+  right: auto;
+  bottom: auto;
+}
+
 .gr-panel-head {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
   display: flex;
   gap: 8px;
   align-items: flex-start;
@@ -1196,6 +1250,11 @@ button.gr-fb-item:hover {
     transition-delay: 0.25s;
   }
 
+  .gr-bar.is-high .gr-bar-btn[data-tip]::before {
+    top: calc(100% + 14px);
+    bottom: auto;
+  }
+
   .gr-bar-btn.is-primary[data-tip]::before {
     left: auto;
     right: 0;
@@ -1251,6 +1310,10 @@ button.gr-fb-item:hover {
   .gr-bar-btn.has-dot::after {
     top: 8px;
     left: calc(50% + 6px);
+  }
+
+  .gr-bar-grip {
+    display: none;
   }
 
   .is-kb .gr-bar {

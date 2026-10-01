@@ -47,6 +47,7 @@
     focus: 'gr:focus',
     panel: 'gr:author:collapsed',
     panelScroll: 'gr:author:panel-scroll',
+    panelPos: 'gr:author:panel-position',
     activeFeedback: 'gr:author:active-feedback',
     draft: 'gr:author:draft',
     authorFeedback: 'gr:author:feedback',
@@ -445,6 +446,47 @@
     return 'near ' + (/^[aeiou]/.test(role) ? 'an ' : 'a ') + role;
   }
 
+  // Where a pin is, in words, from the closest thing with text to the spot:
+  // on "Send briefing" button, right of "Send briefing" button, below "Leadership" heading.
+  const SPOT_TARGETS = 'a, button, h1, h2, h3, h4, h5, h6, p, li, label, img, input, textarea, select, ' +
+    'figcaption, dt, dd, th, td, blockquote, [role="button"]';
+
+  function describeSpot(el, x, y) {
+    const scope = el.closest('section, article, form, header, footer, nav, aside, main') || document.body;
+    let best = null;
+    // A wrapper whose only text is its children's (the box around a button)
+    // would claim "on" for a spot that is really next to the button.
+    const ownText = Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.nodeValue.trim());
+    const candidates = Array.from(scope.querySelectorAll(SPOT_TARGETS));
+    if (ownText && !candidates.includes(el)) candidates.unshift(el);
+    candidates.forEach((c) => {
+      if (isOurs(c)) return;
+      const text = snippet(c);
+      if (!text) return;
+      const r = c.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+      const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+      const role = roleWord(c);
+      // Pages flow downwards, so something beside the spot counts as nearer than
+      // something the same distance above or below; named things (button, link…)
+      // get a little extra pull. On a tie: named first, then the smallest.
+      const score = [Math.max(0, Math.hypot(dx, dy * 3) - (role ? 12 : 0)), role ? 0 : 1, r.width * r.height];
+      const better = !best || score[0] < best.score[0] - 0.5 ||
+        (Math.abs(score[0] - best.score[0]) <= 0.5 && (score[1] < best.score[1] || (score[1] === best.score[1] && score[2] < best.score[2])));
+      if (better) best = { score, text, role, r, dx: Math.sign(x < r.left ? -1 : x > r.right ? 1 : 0), dy: Math.sign(y < r.top ? -1 : y > r.bottom ? 1 : 0), ax: dx, ay: dy };
+    });
+    if (!best || best.score[0] > 240) return describeNear(el);
+    const what = '"' + shorten(best.text, 32) + '"' + (best.role ? ' ' + best.role : '');
+    let where = 'on';
+    if (best.dx || best.dy) {
+      where = best.ax >= best.ay
+        ? (best.dx < 0 ? 'left of' : 'right of')
+        : (best.dy < 0 ? 'above' : 'below');
+    }
+    return where + ' ' + what;
+  }
+
   // The label a step gets in the summary: the element's own short text, its
   // first heading, or the first words of the note.
   function titleFor(el, note) {
@@ -509,6 +551,38 @@
     String(text).trim().split('\n').forEach((line) => out.push(('    > ' + line).replace(/\s+$/, '')));
   }
 
+  // Free pin positions packed into one line at the end of the text summary,
+  // so pins come back to their exact spot when the text is loaded again.
+  const PIN_LINE = 'Pin positions (for the review tool, please keep this line): GR1 ';
+
+  const packSelector = (sel) => sel.replace(/:nth-of-type\((\d+)\)/g, '~$1').replace(/ > /g, '>');
+  const unpackSelector = (sel) => sel.replace(/>/g, ' > ').replace(/~(\d+)/g, ':nth-of-type($1)');
+
+  function encodePins(pins) {
+    const bytes = new TextEncoder().encode(JSON.stringify(pins.map((p) => {
+      if (!p.anchor) return 0;
+      const a = p.anchor;
+      const o = p.offset || { x: 0.5, y: 0.5 };
+      return [packSelector(a.selector), a.tag, a.text, a.fx, a.fy, a.fw, a.fh, o.x, o.y];
+    })));
+    let bin = '';
+    bytes.forEach((b) => { bin += String.fromCharCode(b); });
+    return btoa(bin);
+  }
+
+  function decodePins(code) {
+    try {
+      const bin = atob(code);
+      const list = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
+      return list.map((v) => (Array.isArray(v) ? {
+        anchor: { selector: unpackSelector(String(v[0])), tag: String(v[1]), text: String(v[2] || ''), fx: +v[3], fy: +v[4], fw: +v[5], fh: +v[6] },
+        offset: { x: +v[7], y: +v[8] },
+      } : null));
+    } catch (e) {
+      return [];
+    }
+  }
+
   function summaryText(fb, tour) {
     const report = buildReport(fb, tour);
     const out = [
@@ -529,15 +603,19 @@
     });
     if (!report.pages.length) out.push('', '(No comments yet.)');
     out.push('', 'TOTAL: ' + plural(report.total, 'comment') + ' across ' + plural(report.pages.length, 'page'));
+    const pins = [];
+    report.pages.forEach((p) => p.items.forEach((it) => { if (it.kind === 'pin') pins.push(it.pin); }));
+    if (pins.some((p) => p.anchor)) out.push('', PIN_LINE + encodePins(pins));
     return out.join('\n');
   }
 
   // Reads the plain-text summary back (e.g. copied out of WhatsApp). Free pins
-  // come back without a position; everything else lands where it was.
+  // get their exact spot from the pin line at the end, when it is there.
   function parseSummaryText(text, tour) {
     const fb = emptyFeedback();
     let key = null;
     let cur = null; // { o, k } — where continuation lines are appended
+    let pinSpots = [];
     let recognised = false;
 
     const append = (line) => {
@@ -585,6 +663,9 @@
         const pin = { id: uid('p'), page: key, path: fb.pages[key].path, anchor: null, offset: null, label: m[1], text: '', created: '' };
         fb.freePins.push(pin);
         cur = { o: pin, k: 'text' };
+      } else if ((m = line.match(/GR1\s+([A-Za-z0-9+/=]+)/))) {
+        pinSpots = decodePins(m[1]);
+        cur = null;
       } else if (/^TOTAL:/.test(line)) {
         cur = null;
       } else if ((m = line.match(/^>\s?(.*)$/))) {
@@ -596,6 +677,14 @@
     });
 
     if (!recognised) throw new Error("That doesn't look like review feedback.");
+    // The pin line lists the pins in the order the summary shows them.
+    fb.freePins.forEach((pin, i) => {
+      const spot = pinSpots[i];
+      if (spot) {
+        pin.anchor = spot.anchor;
+        pin.offset = spot.offset;
+      }
+    });
     Object.keys(fb.stepComments).forEach((k) => { fb.stepComments[k] = fb.stepComments[k].trim(); });
     Object.keys(fb.pageComments).forEach((k) => { fb.pageComments[k] = fb.pageComments[k].trim(); });
     fb.freePins.forEach((p) => { p.text = p.text.trim(); });
@@ -724,7 +813,10 @@
   let barEl = null;
   function barSpace() {
     if (!barEl || barEl.hidden) return 0;
-    return barEl.getBoundingClientRect().height + (isPhone() ? 0 : 16);
+    // Space the toolbar takes at the bottom of the screen; none if the client
+    // moved it up.
+    const fromBottom = window.innerHeight - barEl.getBoundingClientRect().top;
+    return fromBottom <= window.innerHeight / 2 ? Math.max(0, fromBottom) : 0;
   }
 
   let layoutFn = function () {};
@@ -859,63 +951,122 @@
 
   // --- element picker (author steps and reviewer free pins) ---------------------
 
+  // The element on the page at a screen point, looking through the review UI.
+  function elementAt(x, y) {
+    for (const el of document.elementsFromPoint(x, y)) {
+      if (isOurs(el)) continue;
+      return el === document.documentElement ? document.body : el;
+    }
+    return null;
+  }
+
+  // A see-through layer over the page takes the click while picking, so
+  // nothing on the page reacts to it: links, buttons (even disabled ones),
+  // embedded maps and the site's own scripts. The element underneath is found
+  // from the point. Scrolling still goes to the page.
   function startPicking(opts) {
     const hoverBox = opts.hover ? h('div', { class: 'gr-hover' }, h('span', { class: 'gr-hover-label' })) : null;
     if (hoverBox) {
       hoverBox.hidden = true;
       docLayer.append(hoverBox);
     }
-    const root = document.documentElement;
-    const prevCursor = root.style.cursor;
-    root.style.cursor = 'crosshair';
+    const layer = h('div', { class: 'gr-pick-layer' });
+    fixedLayer.append(layer);
     const closeToast = toast(opts.message, { sticky: true, demo: opts.demo, action: { label: 'Cancel', onClick: () => finish(true) } });
 
-    const inUi = (e) => e.composedPath().includes(host);
-    const block = (e) => {
-      if (inUi(e)) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    };
-    const onMove = (e) => {
+    const swallow = (e) => e.stopPropagation();
+    ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'dblclick', 'auxclick', 'contextmenu'].forEach((t) => layer.addEventListener(t, swallow));
+    layer.addEventListener('mousemove', (e) => {
       if (!hoverBox) return;
-      if (inUi(e) || !(e.target instanceof Element)) { hoverBox.hidden = true; return; }
-      const r = docRect(e.target);
+      const el = elementAt(e.clientX, e.clientY);
+      if (!el) { hoverBox.hidden = true; return; }
+      const r = docRect(el);
       placeAt(hoverBox, r.x, r.y, r.w, r.h);
-      const text = snippet(e.target);
-      hoverBox.firstChild.textContent = e.target.tagName.toLowerCase() + (text ? ' · ' + shorten(text, 30) : '');
+      const text = snippet(el);
+      hoverBox.firstChild.textContent = el.tagName.toLowerCase() + (text ? ' · ' + shorten(text, 30) : '');
       hoverBox.hidden = false;
-    };
-    const onClick = (e) => {
-      if (inUi(e)) return;
-      block(e);
-      if (!(e.target instanceof Element)) return;
+    });
+    layer.addEventListener('mouseleave', () => { if (hoverBox) hoverBox.hidden = true; });
+    layer.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const el = elementAt(e.clientX, e.clientY);
+      if (!el) return;
       finish(false);
-      opts.onPick(e.target, e);
-    };
+      opts.onPick(el, { pageX: e.clientX + window.scrollX, pageY: e.clientY + window.scrollY, clientX: e.clientX, clientY: e.clientY });
+    });
     const onKey = (e) => {
       if (e.key === 'Escape') { e.preventDefault(); finish(true); }
     };
-    const blocked = ['mousedown', 'mouseup', 'pointerdown', 'pointerup', 'auxclick', 'dblclick', 'submit'];
-
-    window.addEventListener('mousemove', onMove, true);
-    window.addEventListener('click', onClick, true);
     window.addEventListener('keydown', onKey, true);
-    blocked.forEach((t) => window.addEventListener(t, block, true));
 
     let done = false;
     function finish(cancelled) {
       if (done) return;
       done = true;
-      window.removeEventListener('mousemove', onMove, true);
-      window.removeEventListener('click', onClick, true);
       window.removeEventListener('keydown', onKey, true);
-      blocked.forEach((t) => window.removeEventListener(t, block, true));
+      layer.remove();
       if (hoverBox) hoverBox.remove();
-      root.style.cursor = prevCursor;
       closeToast();
       if (cancelled && opts.onCancel) opts.onCancel();
     }
     return finish;
+  }
+
+  // Keeps a fixed box inside the window.
+  function clampToWindow(left, top, w, hgt) {
+    const vw = document.documentElement.clientWidth;
+    return {
+      left: Math.round(clamp(left, 4, Math.max(4, vw - w - 4))),
+      top: Math.round(clamp(top, 4, Math.max(4, window.innerHeight - Math.min(hgt, 56) - 4))),
+    };
+  }
+
+  // Drags a fixed box (the client toolbar, the author panel) by a handle, on
+  // computers. done({ left, top }) is called when it is let go.
+  function dragFixed(e, el, done) {
+    if (isPhone() || e.button !== 0 || e.target.closest('button, a, input, textarea, select')) return;
+    e.preventDefault();
+    const start = el.getBoundingClientRect();
+    const grabX = e.clientX - start.left;
+    const grabY = e.clientY - start.top;
+    let moving = false;
+    const onMove = (ev) => {
+      if (!moving) {
+        if (Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 4) return;
+        moving = true;
+        el.classList.add('is-free', 'is-dragging');
+      }
+      const pos = clampToWindow(ev.clientX - grabX, ev.clientY - grabY, start.width, start.height);
+      el.style.left = pos.left + 'px';
+      el.style.top = pos.top + 'px';
+    };
+    const onUp = () => {
+      el.classList.remove('is-dragging');
+      window.removeEventListener('pointermove', onMove, true);
+      window.removeEventListener('pointerup', onUp, true);
+      window.removeEventListener('pointercancel', onUp, true);
+      if (moving && done) done({ left: parseFloat(el.style.left), top: parseFloat(el.style.top) });
+    };
+    window.addEventListener('pointermove', onMove, true);
+    window.addEventListener('pointerup', onUp, true);
+    window.addEventListener('pointercancel', onUp, true);
+  }
+
+  // Puts a moved box back where it was left, or where it belongs by default.
+  function applyFixedPosition(el, pos) {
+    if (el.classList.contains('is-dragging')) return;
+    if (pos && !isPhone()) {
+      const r = el.getBoundingClientRect();
+      const p = clampToWindow(pos.left, pos.top, r.width, r.height);
+      el.classList.add('is-free');
+      el.style.left = p.left + 'px';
+      el.style.top = p.top + 'px';
+    } else {
+      el.classList.remove('is-free');
+      el.style.left = '';
+      el.style.top = '';
+    }
   }
 
   function copyText(text) {
@@ -1082,7 +1233,16 @@
     }
 
     function headView() {
-      return h('div', { class: 'gr-panel-head' },
+      return h('div', {
+        class: 'gr-panel-head',
+        title: 'Drag to move the panel. Double-click to put it back.',
+        onpointerdown: (e) => dragFixed(e, panel, (pos) => ls.set(KEY.panelPos, pos)),
+        ondblclick: (e) => {
+          if (e.target.closest('button')) return;
+          ls.del(KEY.panelPos);
+          applyFixedPosition(panel, null);
+        },
+      },
         h('div', null,
           h('div', { class: 'gr-panel-title' }, 'Tour builder'),
           h('div', { class: 'gr-muted' }, 'This page: ' + pageTitle(tour.siteName) + '  (' + PAGE + ')')),
@@ -1548,10 +1708,14 @@
       if (rect) placeAt(highlight, rect.x - 4, rect.y - 4, rect.w + 8, rect.h + 8);
     }
 
-    layoutFn = layout;
+    layoutFn = () => {
+      applyFixedPosition(panel, ls.get(KEY.panelPos, null));
+      layout();
+    };
     render();
     // Coming from another page: carry on where the panel was.
     stylesReady.then(() => requestAnimationFrame(() => {
+      applyFixedPosition(panel, ls.get(KEY.panelPos, null));
       if (!editing) panel.scrollTop = Number(ss.get(KEY.panelScroll)) || 0;
       revealActiveFeedback();
     }));
@@ -1586,6 +1750,7 @@
       finished: !!saved.finished,
       stepIndex: Number(saved.stepIndex) || 0,
       pinDemoSeen: !!saved.pinDemoSeen,
+      barPos: saved.barPos || null,
       fb: Object.assign(emptyFeedback(), saved.fb || {}),
     };
     const fb = state.fb;
@@ -1631,6 +1796,24 @@
     function renderBar() {
       const n = steps.length;
       bar.replaceChildren(...[
+        h('span', {
+          class: 'gr-bar-grip',
+          title: 'Drag to move the toolbar. Double-click to put it back.',
+          'aria-hidden': 'true',
+          onpointerdown: (e) => dragFixed(e, bar, (pos) => {
+            state.barPos = pos;
+            save();
+            markBarHeight();
+            scheduleLayout();
+          }),
+          ondblclick: () => {
+            state.barPos = null;
+            save();
+            applyFixedPosition(bar, null);
+            markBarHeight();
+            scheduleLayout();
+          },
+        }, '⋮⋮'),
         n > 0 && barButton('tour', 'Tour ' + (state.stepIndex + 1) + '/' + n, {
           active: tipVisible,
           pressable: true,
@@ -2053,7 +2236,7 @@
               x: round4(r.w ? clamp((e.pageX - r.x) / r.w, 0, 1) : 0.5),
               y: round4(r.h ? clamp((e.pageY - r.y) / r.h, 0, 1) : 0.5),
             },
-            label: describeNear(el),
+            label: describeSpot(el, e.clientX, e.clientY),
             text: '',
             created: new Date().toISOString(),
           };
@@ -2265,7 +2448,14 @@
 
     // --- start ---
 
+    // Toolbar hints open below the toolbar when it was moved near the top.
+    function markBarHeight() {
+      bar.classList.toggle('is-high', bar.classList.contains('is-free') && bar.getBoundingClientRect().top < 140);
+    }
+
     layoutFn = () => {
+      applyFixedPosition(bar, state.barPos);
+      markBarHeight();
       if (tipVisible) positionStep(false);
       layoutPins();
     };
@@ -2277,6 +2467,7 @@
       state.stepIndex = clamp(state.stepIndex, 0, Math.max(steps.length - 1, 0));
       renderBar();
       renderPins();
+      stylesReady.then(() => scheduleLayout()); // puts a moved toolbar back where it was left
       // A new visit (not just moving between pages) by someone who was here before.
       const visitKey = 'gr:visit:' + MODE;
       const newVisit = !ss.get(visitKey);
