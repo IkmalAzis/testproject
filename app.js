@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  const { injectHtml, engineTag, contentType, isHtml, encodePath } = self.GuidedReviewInject;
+  const { injectHtml, engineTag, storageGuardTag, contentType, isHtml, encodePath } = self.GuidedReviewInject;
 
   const PROJECT_CACHE = 'gr-project';
   const PREFIX = '/preview/';
@@ -153,6 +153,10 @@
   // --- reading a dropped folder -------------------------------------------------------
 
   async function walkEntry(entry, prefix, out) {
+    // node_modules, .git and other hidden folders are left out anyway (IGNORED);
+    // skipping them here keeps a big app folder quick to drop. .output holds
+    // Nuxt's build, so it stays.
+    if (entry.isDirectory && (/^node_modules$/i.test(entry.name) || (entry.name[0] === '.' && entry.name !== '.output'))) return;
     if (entry.isFile) {
       const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
       out.push({ path: prefix + entry.name, file });
@@ -209,9 +213,14 @@
     return false;
   }
 
-  const SOURCE_MESSAGE = 'This is the source code of an app (React, Vue, Svelte, Angular…). Browsers cannot run it as it is, so the page would stay blank. ' +
-    'Build it first: in the app\'s folder run "npm run build". Then drop the whole folder again; the tool picks the build output ' +
-    '(dist, build or out) by itself.';
+  const SOURCE_TITLE = 'This app needs to be built first';
+  // folder: where the app's index.html sits in what was dropped ("my-app/web").
+  const sourceMessage = (folder) => [
+    'This is the source code of an app (React, Vue, Svelte, Angular…). Browsers cannot run it as it is, so the page would stay blank.',
+    'Build it once: open a terminal in the ' + (folder ? '“' + folder + '” folder' : 'app\'s folder') + ' and run "npm run build" ' +
+      '(run "npm install" first if the app has never been set up on this computer).',
+    'Then drop the same folder here again. The tool finds the build (dist, build or out) by itself.',
+  ];
 
   // Finds the site inside what was dropped: the folder holding the top-most
   // index.html, or for an app's source folder, its build output (dist, build,
@@ -222,7 +231,10 @@
       .filter((f) => /(^|\/)index\.html?$/i.test(f.path))
       .sort((a, b) => a.path.split('/').length - b.path.split('/').length);
     if (!indexes.length) {
-      throw new Error('There is no index.html in what you dropped. Drop the folder that has the site\'s index.html in it.');
+      const zipped = list.length === 1 && /\.zip$/i.test(list[0].path);
+      throw new Error(zipped
+        ? 'That is a .zip file. Unzip it first (right-click → Extract All), then drop the folder that comes out.'
+        : 'There is no index.html in what you dropped. Drop the folder that has the site\'s index.html in it.');
     }
     // The top-most index.html is the site, unless it is an app's source: then
     // the app's build output is, if it has been built.
@@ -234,7 +246,11 @@
     let index = indexes[0];
     if (await isSource(index)) {
       index = indexes.find((f) => BUILD_DIR.test(f.path));
-      if (!index || (await isSource(index))) throw new Error(SOURCE_MESSAGE);
+      if (!index || (await isSource(index))) {
+        const err = new Error(SOURCE_TITLE);
+        err.lines = sourceMessage(indexes[0].path.replace(/\/?[^/]*$/, ''));
+        throw err;
+      }
     }
     const root = index.path.replace(/[^/]*$/, '');
 
@@ -254,7 +270,8 @@
     try {
       shaped = await shapeProject(await listPromise);
     } catch (e) {
-      openDialog({ title: SOURCE_MESSAGE === e.message ? 'This app needs to be built first' : 'That is not a site folder', body: h('p', null, e.message), actions: [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => $('dialog').close() }, 'OK')] });
+      const lines = e.lines || [e.message];
+      openDialog({ title: e.lines ? e.message : 'That is not a site folder', body: lines.map((t) => h('p', null, t)), actions: [h('button', { class: 'btn btn-primary', type: 'button', onclick: () => $('dialog').close() }, 'OK')] });
       return;
     }
     if (project) {
@@ -597,7 +614,7 @@
       const path = decodeURIComponent(new URL(req.url).pathname.slice(PREFIX.length));
       const res = await cache.match(req);
       if (isHtml(path)) {
-        const html = injectHtml(await res.text(), { head: '<meta name="robots" content="noindex">', body: tag });
+        const html = injectHtml(await res.text(), { head: '<meta name="robots" content="noindex">' + storageGuardTag(), body: tag });
         files['/' + path] = encoder.encode(html);
       } else {
         files['/' + path] = new Uint8Array(await res.arrayBuffer());

@@ -43,6 +43,20 @@
       'history.replaceState(history.state,"",l.pathname.slice(p.length)+l.search+l.hash);})(' + at + ');</script>';
   }
 
+  // Keeps the review's own saved data ("gr:" keys: the tour, loaded feedback,
+  // the client's comments, tool settings) when the reviewed site's scripts
+  // tidy up storage, e.g. an app that calls localStorage.clear() on start or
+  // on logout. Goes first in <head>, before any of the site's scripts. The
+  // engine removes its own keys through the kept original (__grRemove).
+  function storageGuardTag() {
+    return '<script>(function(){try{var P=Storage.prototype;if(P.__grRemove)return;var r=P.removeItem,k=P.key;' +
+      'Object.defineProperty(P,"__grRemove",{value:r});' +
+      'P.removeItem=function(n){if(String(n).indexOf("gr:")===0)return;return r.call(this,n);};' +
+      'P.clear=function(){var a=[];for(var i=0;i<this.length;i++)a.push(k.call(this,i));' +
+      'for(var j=0;j<a.length;j++)if(a[j]!=null&&a[j].indexOf("gr:")!==0)r.call(this,a[j]);};' +
+      '}catch(e){}})();</script>';
+  }
+
   const TYPES = {
     html: 'text/html; charset=utf-8', htm: 'text/html; charset=utf-8', css: 'text/css; charset=utf-8',
     js: 'text/javascript; charset=utf-8', mjs: 'text/javascript; charset=utf-8', json: 'application/json',
@@ -62,5 +76,5 @@
   // "my page.html" -> "my%20page.html", keeping the slashes.
   const encodePath = (path) => path.split('/').map(encodeURIComponent).join('/');
 
-  scope.GuidedReviewInject = { injectHtml, engineTag, appAddressTag, contentType, isHtml, encodePath };
+  scope.GuidedReviewInject = { injectHtml, engineTag, appAddressTag, storageGuardTag, contentType, isHtml, encodePath };
 })(self);

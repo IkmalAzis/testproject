@@ -6,7 +6,7 @@
  */
 importScripts('inject-html.js');
 
-const { injectHtml, engineTag, appAddressTag, encodePath } = self.GuidedReviewInject;
+const { injectHtml, engineTag, appAddressTag, storageGuardTag, encodePath } = self.GuidedReviewInject;
 
 const PROJECT_CACHE = 'gr-project';
 const PREFIX = '/preview/';
@@ -89,7 +89,7 @@ async function serveProject(url) {
     const config = await readConfig(cache);
     const spa = await isSinglePageApp(cache);
     const html = injectHtml(await res.text(), {
-      head: spa ? appAddressTag(PREFIX) : '',
+      head: storageGuardTag() + (spa ? appAddressTag(PREFIX) : ''),
       body: engineTag({
         src: '/review.js?' + ENGINE_MARK,
         css: '/review.css?' + ENGINE_MARK,

@@ -57,6 +57,10 @@
     review: (token) => 'gr:review:' + token,
   };
 
+  // The page guards "gr:" keys from the site's own scripts (storageGuardTag);
+  // the engine removes its keys through the original removeItem it keeps.
+  const removeKey = (store, key) => (Storage.prototype.__grRemove || Storage.prototype.removeItem).call(store, key);
+
   let storageOk = true;
   let onStorageFail = function () {};
   const ls = {
@@ -81,17 +85,17 @@
       }
     },
     del(key) {
-      try { localStorage.removeItem(key); } catch (e) { /* nothing to do */ }
+      try { removeKey(localStorage, key); } catch (e) { /* nothing to do */ }
     },
   };
   const ss = {
     get(key) { try { return sessionStorage.getItem(key); } catch (e) { return null; } },
     set(key, value) { try { sessionStorage.setItem(key, value); } catch (e) { /* nothing to do */ } },
-    del(key) { try { sessionStorage.removeItem(key); } catch (e) { /* nothing to do */ } },
+    del(key) { try { removeKey(sessionStorage, key); } catch (e) { /* nothing to do */ } },
   };
   try {
     localStorage.setItem('gr:test', '1');
-    localStorage.removeItem('gr:test');
+    removeKey(localStorage, 'gr:test');
   } catch (e) {
     storageOk = false;
   }

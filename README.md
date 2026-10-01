@@ -98,7 +98,9 @@ project has its own).
 Only the front end is published. Anything the app loads from its own back end
 (`/api/…`, a server on your machine) will not be there on the review site, so
 review screens that show data only if the back end is reachable from the
-internet.
+internet. Screens behind a login that needs the back end (a dashboard, an
+account page) cannot be reached on the review site; the client sees the
+screens that work without it, such as the login page.
 
 ---
 
@@ -206,6 +208,12 @@ It never silently points at the wrong thing.
 
 The client's comments are stored on their own device, on the review site's
 origin, under `gr:review:<token>`.
+
+All of these keys start with `gr:`. Every previewed and published page gets a
+small script first in `<head>` that keeps `gr:` keys when the site's own
+scripts call `removeItem` or `clear()` (an app that wipes storage on start or
+on logout would otherwise remove the tour, the client's comments or the
+Netlify settings). The site's other keys are removed as usual.
 
 ### File formats
 
