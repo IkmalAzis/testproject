@@ -1595,6 +1595,7 @@
     let tourFailed = false;
     let steps = [];
     let tipVisible = false;
+    let tipMoved = false; // the client dragged the note somewhere; leave it there
     let pinning = false;
     let pinsNeedRender = true;
 
@@ -1802,7 +1803,54 @@
           h('button', { class: 'gr-btn', type: 'button', disabled: i === 0, onclick: () => goStep(i - 1) }, '← Previous'),
           h('span', { class: 'gr-count', 'aria-live': 'polite' }, (i + 1) + ' / ' + n),
           h('button', { class: 'gr-btn gr-btn-primary', type: 'button', onclick: () => (last ? finishTour() : goStep(i + 1)) }, last ? 'Finish' : 'Next →')));
+      const head = el.firstChild;
+      head.title = 'Drag to move this note';
+      head.addEventListener('pointerdown', (e) => dragTip(e, el, head));
       return el;
+    }
+
+    // On a computer the note can be dragged by its top bar, e.g. off a logo
+    // it happens to cover. It then stays put on screen until the next stop.
+    function dragTip(e, el, head) {
+      if (isPhone() || e.button !== 0 || e.target.closest('.gr-icon-btn')) return;
+      e.preventDefault();
+      const start = el.getBoundingClientRect();
+      const grabX = e.clientX - start.left;
+      const grabY = e.clientY - start.top;
+      let moving = false;
+      // Listened for on the window: the note changes layer when the drag
+      // starts, which would drop a pointer capture on it.
+      const onMove = (ev) => {
+        if (!moving) {
+          if (Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 4) return;
+          moving = true;
+          tipMoved = true;
+          if (el.parentNode !== fixedLayer) fixedLayer.append(el);
+          el.classList.remove('is-docked');
+          el.classList.add('is-free', 'is-dragging');
+          el.style.bottom = '';
+        }
+        const vw = document.documentElement.clientWidth;
+        el.style.left = Math.round(clamp(ev.clientX - grabX, 4, vw - start.width - 4)) + 'px';
+        el.style.top = Math.round(clamp(ev.clientY - grabY, 4, window.innerHeight - 48)) + 'px';
+      };
+      const onUp = () => {
+        el.classList.remove('is-dragging');
+        window.removeEventListener('pointermove', onMove, true);
+        window.removeEventListener('pointerup', onUp, true);
+        window.removeEventListener('pointercancel', onUp, true);
+      };
+      window.addEventListener('pointermove', onMove, true);
+      window.addEventListener('pointerup', onUp, true);
+      window.addEventListener('pointercancel', onUp, true);
+    }
+
+    // A moved note stays where it was put, but never off screen.
+    function keepMovedTipOnScreen() {
+      const r = tip.getBoundingClientRect();
+      const vw = document.documentElement.clientWidth;
+      tip.style.left = Math.round(clamp(r.left, 4, Math.max(4, vw - r.width - 4))) + 'px';
+      tip.style.top = Math.round(clamp(r.top, 4, Math.max(4, window.innerHeight - 48))) + 'px';
     }
 
     function showStep(scroll) {
@@ -1811,6 +1859,7 @@
       closeFloating();
       if (tip) tip.remove();
       tip = buildTip(s);
+      tipMoved = false;
       tipVisible = true;
       renderBar();
       positionStep(scroll);
@@ -1838,8 +1887,15 @@
       placeAt(runway, 0, doc.h, 1, window.innerHeight * 0.8);
       runway.hidden = false;
 
-      if (isPhone()) placeSheet(R, scroll);
-      else placeTip(R, scroll);
+      if (isPhone()) {
+        tipMoved = false;
+        tip.classList.remove('is-free');
+        placeSheet(R, scroll);
+      } else if (tipMoved) {
+        keepMovedTipOnScreen();
+      } else {
+        placeTip(R, scroll);
+      }
     }
 
     // Desktop: beside the element, never over it.
@@ -1856,7 +1912,7 @@
       // The note never grows taller than the free screen; a long note scrolls
       // inside it, with Previous / Next always in view. It is measured where it
       // is: moving it to another layer would take focus away from someone typing.
-      tip.classList.remove('is-sheet', 'is-min');
+      tip.classList.remove('is-sheet', 'is-min', 'is-free');
       tip.style.maxHeight = Math.max(180, avail) + 'px';
       if (!tip.parentNode) docLayer.append(tip); // a new note has no size until it is in the page
       const w = tip.offsetWidth;

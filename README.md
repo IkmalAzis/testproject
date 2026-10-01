@@ -82,6 +82,8 @@ The status in the top bar tells you whether the review site is up to date:
   with **Previous / Next**, a counter (`3 / 12`) and an optional comment box.
   The note never covers the element, and a fixed site header never hides it.
   On a phone the note is a sheet above the toolbar and can be folded down.
+  On a computer the note can be dragged by its top bar, e.g. off something it
+  covers; it stays there until the next stop.
 - **Add a comment**: tap anywhere on the page and type. The first time, a
   short animation shows a pointer (a fingertip on phones) dropping a pin.
 - On a computer, hovering a toolbar button explains what it does.

@@ -782,6 +782,33 @@ p {
   font-variant-numeric: tabular-nums;
 }
 
+/* Moved by the client: stays at that spot on screen, above the toolbar. */
+.gr-tip.is-free {
+  position: fixed;
+  z-index: 16;
+}
+
+.gr-tip.is-dragging {
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.35), 0 2px 6px rgba(15, 23, 42, 0.1);
+}
+
+@media (hover: hover) and (min-width: 700px) {
+  .gr-tip-head {
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+
+  .gr-tip.is-dragging .gr-tip-head {
+    cursor: grabbing;
+  }
+
+  .gr-tip-head .gr-tip-title {
+    cursor: inherit;
+  }
+}
+
 /* Docked over a section taller than the screen (desktop). */
 .gr-tip.is-docked {
   position: fixed;
