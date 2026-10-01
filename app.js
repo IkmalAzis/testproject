@@ -182,44 +182,70 @@
     })();
   }
 
-  const BUILD_DIR = /(^|\/)(dist|build|out)\/$/i;
+  // Build output folders: Vite, Vue CLI, Angular (dist), Create React App
+  // (build), Next export (out), Nuxt generate (.output/public).
+  const BUILD_DIR = /(^|\/)(dist|build|out|\.output\/public)\//i;
 
-  // The source of a React / Vue / Svelte app: browsers cannot run it as it is,
-  // which shows as a blank page. Vite's index.html loads /src/main.jsx; Create
-  // React App's public/index.html has %PUBLIC_URL% placeholders.
+  // The source of a React / Vue / Svelte / Angular app: browsers cannot run it
+  // as it is, which shows as a blank page. Vite's index.html loads
+  // /src/main.jsx (or main.js / main.ts next to a package.json); Create React
+  // App and Vue CLI keep placeholders in public/index.html; Angular's
+  // src/index.html has only <app-root>.
   const SOURCE_SIGNS = [
     /<script[^>]+src=["'][^"']*\/src\/[^"']+\.(jsx|tsx|ts|vue|svelte)["']/i,
     /%PUBLIC_URL%/,
+    /<%=\s*BASE_URL/,
   ];
 
-  const SOURCE_MESSAGE = 'This is the source code of a React (or Vue, Svelte…) app. Browsers cannot run it as it is, so the page would stay blank. ' +
+  function looksLikeSource(html, siblings) {
+    if (SOURCE_SIGNS.some((re) => re.test(html))) return true;
+    const scripts = html.match(/<script\b[^>]*>/gi) || [];
+    const hasProjectFile = (re) => siblings.some((p) => re.test(p));
+    // <script type="module" src="/src/main.js"> beside package.json / vite.config.js
+    const srcModule = scripts.some((t) => /type=["']?module/i.test(t) && /src=["'](\.?\/)?src\//i.test(t));
+    if (srcModule && hasProjectFile(/^(package\.json|vite\.config\.[a-z]+)$/i)) return true;
+    // Angular: only <app-root></app-root>, no scripts (a build adds them)
+    if (/<app-root[\s>]/i.test(html) && !scripts.length) return true;
+    return false;
+  }
+
+  const SOURCE_MESSAGE = 'This is the source code of an app (React, Vue, Svelte, Angular…). Browsers cannot run it as it is, so the page would stay blank. ' +
     'Build it first: in the app\'s folder run "npm run build". Then drop the whole folder again; the tool picks the build output ' +
     '(dist, build or out) by itself.';
 
-  // Finds the site inside what was dropped: a build output folder (dist,
-  // build, out) if there is one, else the folder holding the top-most
-  // index.html. Everything outside it, and hidden files, are left out.
+  // Finds the site inside what was dropped: the folder holding the top-most
+  // index.html, or for an app's source folder, its build output (dist, build,
+  // out). Everything outside it, and hidden files, are left out.
   async function shapeProject(list) {
-    const files = list.filter((f) => !IGNORED.test(f.path));
+    const files = list.filter((f) => !IGNORED.test(f.path.replace(/(^|\/)\.output\/public\//i, '$1output-public/')));
     const indexes = files
       .filter((f) => /(^|\/)index\.html?$/i.test(f.path))
       .sort((a, b) => a.path.split('/').length - b.path.split('/').length);
     if (!indexes.length) {
       throw new Error('There is no index.html in what you dropped. Drop the folder that has the site\'s index.html in it.');
     }
-    const built = indexes.find((f) => BUILD_DIR.test(f.path.replace(/[^/]*$/, '')));
-    const index = built || indexes[0];
-    const html = await index.file.text();
-    if (SOURCE_SIGNS.some((re) => re.test(html))) throw new Error(SOURCE_MESSAGE);
-
+    // The top-most index.html is the site, unless it is an app's source: then
+    // the app's build output is, if it has been built.
+    const isSource = async (f) => {
+      const dir = f.path.replace(/[^/]*$/, '');
+      const siblings = files.filter((x) => x.path.startsWith(dir)).map((x) => x.path.slice(dir.length)).filter((p) => !p.includes('/'));
+      return looksLikeSource(await f.file.text(), siblings);
+    };
+    let index = indexes[0];
+    if (await isSource(index)) {
+      index = indexes.find((f) => BUILD_DIR.test(f.path));
+      if (!index || (await isSource(index))) throw new Error(SOURCE_MESSAGE);
+    }
     const root = index.path.replace(/[^/]*$/, '');
+
     const inside = files
       .filter((f) => f.path.startsWith(root))
       .map((f) => ({ path: f.path.slice(root.length), file: f.file }));
-    // "my-app/dist/" is called "my-app", not "dist".
+    // "my-app/dist/" is called "my-app", not "dist"; so is "my-app/dist/my-app/browser/".
     const parts = root.replace(/\/$/, '').split('/').filter(Boolean);
-    if (parts.length > 1 && BUILD_DIR.test(parts[parts.length - 1] + '/')) parts.pop();
-    const name = parts.pop() || (list[0] && list[0].path.includes('/') ? list[0].path.split('/')[0] : '') || 'project';
+    const at = parts.findIndex((p, i) => /^(dist|build|out)$/i.test(p) || (p === '.output' && parts[i + 1] === 'public'));
+    const name = (at > 0 ? parts[at - 1] : parts.pop()) ||
+      (list[0] && list[0].path.includes('/') ? list[0].path.split('/')[0] : '') || 'project';
     return { name, files: inside };
   }
 

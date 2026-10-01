@@ -78,15 +78,17 @@ Change or disconnect this later with **Netlify…** in the top bar.
 The status in the top bar tells you whether the review site is up to date:
 *Not published yet*, *Published 5 min ago*, or *Tour changed since publishing*.
 
-### Apps (React, Vue, Svelte…)
+### Apps (React, Vue, Svelte, Angular…)
 
 An app's source code cannot run in a browser as it is; dropped as it is, it
 shows a blank page. Build it first:
 
 1. In the app's folder (e.g. `frontend`), run `npm run build`.
-2. Drop the whole folder. The tool picks the build output (`dist`, `build` or
-   `out`) by itself and names the project after the app's folder. Dropping
-   source code without a build shows a message saying so.
+2. Drop the whole folder. The tool picks the build output by itself and names
+   the project after the app's folder: `dist` (Vite, Vue CLI, Angular's
+   `dist/<app>/browser`), `build` (Create React App), `out` (Next.js static
+   export) or `.output/public` (Nuxt generate). Dropping source code without a
+   build shows a message saying so.
 
 The app's routes (`/about`, `/products/12`, or `#/about`) count as pages:
 click through the app as usual, and steps are kept per route. On the review
