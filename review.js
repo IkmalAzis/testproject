@@ -1090,6 +1090,9 @@
           ? 'This element is hidden right now. Saving keeps the old position.'
           : 'This element is no longer on the page. Delete the step and pick again.'),
         hasText(clientSaid) && h('div', { class: 'gr-client' }, h('strong', null, 'Client: '), clientSaid),
+        // Too tall to show together with a note above or below it (see placeTip).
+        editing.el && editing.el.isConnected && docRect(editing.el).h > window.innerHeight - 300 &&
+          h('p', { class: 'gr-warn' }, 'This is a large area. Your client will see the top of it, with your note in the corner of the screen. To point at one thing inside it, press Cancel and pick something smaller.'),
         ta,
         counter,
         h('div', { class: 'gr-row' },
@@ -1763,8 +1766,9 @@
     // Desktop: beside the element, never over it.
     function placeTip(R, scroll) {
       if (tip.parentNode !== docLayer) docLayer.append(tip);
-      tip.classList.remove('is-sheet', 'is-min');
+      tip.classList.remove('is-sheet', 'is-min', 'is-docked');
       tip.style.maxHeight = '';
+      tip.style.bottom = '';
       tip.style.left = '0px';
       tip.style.top = '0px';
       const w = tip.offsetWidth;
@@ -1800,9 +1804,8 @@
         y = R.y - gap - th;
         focusTop = y - m - inset;
       } else {
-        x = midX;
-        y = R.y + R.h + gap;
-        focusTop = y + th + m + bottomSpace - vh;
+        dockTip(R, scroll, inset, bottomSpace);
+        return;
       }
       placeAt(tip, x, y);
 
@@ -1814,13 +1817,29 @@
       }
     }
 
+    // A section too big to fit beside, above or below: show its top under the
+    // site header, with the note docked in the screen's lower corner over it.
+    // Putting the note under the section would scroll the section itself away.
+    function dockTip(R, scroll, inset, bottomSpace) {
+      if (tip.parentNode !== fixedLayer) fixedLayer.append(tip);
+      tip.classList.add('is-docked');
+      tip.style.left = '';
+      tip.style.top = '';
+      tip.style.bottom = Math.round(bottomSpace + 12) + 'px';
+      if (!scroll) return;
+      const topOnScreen = R.y - window.scrollY;
+      if (topOnScreen < inset + 4 || topOnScreen > window.innerHeight * 0.25) scrollToY(R.y - inset - 12);
+    }
+
     // Phone: a sheet above the toolbar; the element is scrolled into the space
     // above it. The sheet can be folded down to its title bar.
     function placeSheet(R, scroll) {
       if (tip.parentNode !== fixedLayer) fixedLayer.append(tip);
+      tip.classList.remove('is-docked');
       tip.classList.add('is-sheet');
       tip.style.left = '';
       tip.style.top = '';
+      tip.style.bottom = '';
       // The element gets its room first; the sheet scrolls inside what is left.
       // Only an element taller than most of the screen can end up underneath.
       const inset = topInset();
