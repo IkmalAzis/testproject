@@ -795,7 +795,9 @@
     h('div', { class: 'gr-card-head' },
       h('h2', { class: 'gr-card-title' }, opts.title),
       h('button', { class: 'gr-icon-btn', type: 'button', 'aria-label': 'Close', onclick: () => close() }, '×')),
-    h('div', { class: 'gr-card-body' }, opts.body));
+    h('div', { class: 'gr-card-body' }, opts.body),
+    // The footer stays in view while a long body scrolls.
+    opts.footer && h('div', { class: 'gr-card-foot' }, opts.footer));
 
     let wrap = card;
     if (asPopover) {
@@ -1626,19 +1628,18 @@
           renderBar();
         },
         body: [
-          h('p', null, 'This is a guided walk through ' + tour.siteName + '. I have left short notes on the parts I would like you to look at.'),
+          h('p', null, 'A guided walk through ' + tour.siteName + ', with short notes on the parts I would like you to check.'),
           tourFailed && h('p', { class: 'gr-warn' }, 'The guided tour could not be loaded, but you can still leave comments anywhere on the site.'),
           h('ul', { class: 'gr-list' },
-            n > 0 && h('li', null, plural(n, 'stop') + ' across ' + plural(pages, 'page') + ' — about ' + minutes + ' minutes.'),
-            n > 0 && h('li', null, 'At each stop, read my note and write a comment if you have one. Leaving it empty is fine.'),
-            h('li', null, 'To comment on anything else, press "Add a comment", then tap the spot on the page.'),
-            h('li', null, 'For thoughts about a whole page — too long, wrong order, something missing — press "This page".'),
-            h('li', null, 'No rush: you can just look around now and comment later. Everything is saved on this phone as you go. Open this same link again and you will pick up where you left off.')),
+            n > 0 && h('li', null, plural(n, 'stop') + ' across ' + plural(pages, 'page') + ', about ' + minutes + ' minutes.'),
+            n > 0 && h('li', null, 'At each stop, read my note and comment if you like. Empty is fine.'),
+            h('li', null, 'Anything else: press "Add a comment" and tap the spot.'),
+            h('li', null, 'About a whole page: press "This page".'),
+            h('li', null, 'No rush. It saves on this phone, so you can look now and comment later on the same link.')),
           h('p', { class: 'gr-strong' }, 'Nothing is sent to me until you press "Send feedback".'),
-          h('div', { class: 'gr-row' },
-            h('button', { class: 'gr-btn gr-btn-primary gr-btn-lg', type: 'button', onclick: start },
-              !n ? 'Start' : state.stepIndex > 0 ? 'Continue the tour' : 'Start the tour')),
         ],
+        footer: h('button', { class: 'gr-btn gr-btn-primary gr-btn-lg', type: 'button', onclick: start },
+          !n ? 'Start' : state.stepIndex > 0 ? 'Continue the tour' : 'Start the tour'),
       });
     }
 
@@ -1799,14 +1800,6 @@
 
     // Desktop: beside the element, never over it.
     function placeTip(R, scroll) {
-      if (tip.parentNode !== docLayer) docLayer.append(tip);
-      tip.classList.remove('is-sheet', 'is-min', 'is-docked');
-      tip.style.maxHeight = '';
-      tip.style.bottom = '';
-      tip.style.left = '0px';
-      tip.style.top = '0px';
-      const w = tip.offsetWidth;
-      const th = tip.offsetHeight;
       const vw = document.documentElement.clientWidth;
       const vh = window.innerHeight;
       const sx = window.scrollX;
@@ -1815,13 +1808,22 @@
       const bottomSpace = barSpace();
       const inset = topInset();
       const avail = vh - m * 2 - bottomSpace - inset;
+
+      // The note never grows taller than the free screen; a long note scrolls
+      // inside it, with Previous / Next always in view. It is measured where it
+      // is: moving it to another layer would take focus away from someone typing.
+      tip.classList.remove('is-sheet', 'is-min');
+      tip.style.maxHeight = Math.max(180, avail) + 'px';
+      if (!tip.parentNode) docLayer.append(tip); // a new note has no size until it is in the page
+      const w = tip.offsetWidth;
+      const th = tip.offsetHeight;
       const midX = clamp(R.x + R.w / 2 - w / 2, sx + m, sx + vw - w - m);
       let x;
       let y;
       let focusTop;
 
       if (R.h + gap + th <= avail) {
-        // Element and tooltip fit on screen together: tooltip below.
+        // Element and note fit on screen together: note below.
         x = midX;
         y = R.y + R.h + gap;
         focusTop = R.y - m - inset - (avail - (R.h + gap + th)) / 2;
@@ -1833,14 +1835,14 @@
         x = R.x - gap - w;
         y = R.y;
         focusTop = R.y - m - inset;
-      } else if (R.y >= th + gap + m) {
-        x = midX;
-        y = R.y - gap - th;
-        focusTop = y - m - inset;
       } else {
         dockTip(R, scroll, inset, bottomSpace);
         return;
       }
+
+      if (tip.parentNode !== docLayer) docLayer.append(tip);
+      tip.classList.remove('is-docked');
+      tip.style.bottom = '';
       placeAt(tip, x, y);
 
       if (scroll) {
@@ -1851,9 +1853,9 @@
       }
     }
 
-    // A section too big to fit beside, above or below: show its top under the
-    // site header, with the note docked in the screen's lower corner over it.
-    // Putting the note under the section would scroll the section itself away.
+    // A section too big to show with its note beside or below it: show its top
+    // under the site header, with the note docked in the screen's lower corner
+    // over it. A note under or above the section would scroll the section away.
     function dockTip(R, scroll, inset, bottomSpace) {
       if (tip.parentNode !== fixedLayer) fixedLayer.append(tip);
       tip.classList.add('is-docked');
