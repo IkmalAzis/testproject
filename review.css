@@ -1406,6 +1406,7 @@ button.gr-fb-item:hover {
        the bottom while the address bar slides back in (scrolling up), instead
        of letting it slide down and get cut off. */
     will-change: transform;
+    transition: bottom 0.15s ease-out;
   }
 
   .gr-bar-btn {
@@ -1467,6 +1468,7 @@ button.gr-fb-item:hover {
     border-radius: 16px 16px 0 0;
     box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.18);
     will-change: transform;
+    transition: bottom 0.15s ease-out;
   }
 
   .is-kb .gr-tip.is-sheet {

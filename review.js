@@ -927,17 +927,31 @@
         const gap = Math.max(0, Math.round(Math.max(fixedBottom, window.innerHeight) - seenBottom));
         const kb = gap > 80;
         app.style.setProperty('--gr-kb', gap + 'px');
-        // Not while zoomed in: then the gap is just the part zoomed out of view.
-        app.style.setProperty('--gr-lift', (kb || vv.scale > 1.05 ? 0 : gap) + 'px');
         app.style.setProperty('--gr-vvh', Math.round(vv.height) + 'px');
         app.classList.toggle('is-kb', kb);
-        // ?gr-debug in the address: show the numbers (for checking a phone).
-        if (debugBox) {
+        // The lift waits until scrolling has settled: while the address bar
+        // slides in or out the numbers jump around, and following them made
+        // the toolbar fly up and down on a fast scroll. Not while zoomed in:
+        // then the gap is just the part zoomed out of view.
+        const lift = kb || vv.scale > 1.05 ? 0 : gap;
+        clearTimeout(liftTimer);
+        if (lift === shownLift) return showDebug();
+        liftTimer = setTimeout(() => {
+          shownLift = lift;
+          app.style.setProperty('--gr-lift', lift + 'px');
+          showDebug();
+        }, kb ? 0 : 300);
+        showDebug();
+        function showDebug() {
+          // ?gr-debug in the address: show the numbers (for checking a phone).
+          if (!debugBox) return;
           debugBox.textContent = 'fixed ' + Math.round(fixedBottom) + ' · inner ' + window.innerHeight +
             ' · seen ' + Math.round(seenBottom) + ' (h ' + Math.round(vv.height) + ' top ' + Math.round(vv.offsetTop) +
-            ' scale ' + vv.scale.toFixed(2) + ') · lift ' + (kb ? 0 : gap);
+            ' scale ' + vv.scale.toFixed(2) + ') · gap ' + gap + ' · lift ' + shownLift;
         }
       };
+      let liftTimer = 0;
+      let shownLift = 0;
       const debugBox = /[?&]gr-debug\b/.test(location.search) ? h('div', { class: 'gr-debug' }) : null;
       if (debugBox) fixedLayer.append(debugBox);
       const queue = () => {
