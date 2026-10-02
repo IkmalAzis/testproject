@@ -1361,6 +1361,12 @@ button.gr-fb-item:hover {
 /* --- phone ------------------------------------------------------------------------------ */
 
 @media (max-width: 699px) {
+  /* Short toolbar on phones: more room for the page and the note. Still a
+     comfortable tap target (icon plus label across the full button). */
+  .gr-app {
+    --gr-bar-h: 50px;
+  }
+
   .gr-bar {
     right: 0;
     bottom: 0;
@@ -1377,15 +1383,30 @@ button.gr-fb-item:hover {
   .gr-bar-btn {
     flex: 1;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
     justify-content: center;
     min-width: 0;
+    min-height: 0;
     height: var(--gr-bar-h);
-    padding: 6px 2px;
+    padding: 4px 1px;
     border-radius: 0;
-    font-size: 11px;
-    white-space: normal;
+    /* Tab-bar size, like iOS and Android: whole labels on a 360px phone. */
+    font-size: 10px;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
     text-align: center;
+  }
+
+  .gr-bar-btn .gr-ico {
+    width: 18px;
+    height: 18px;
+  }
+
+  .gr-bar-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .gr-bar-btn.is-primary {
@@ -1393,8 +1414,8 @@ button.gr-fb-item:hover {
   }
 
   .gr-bar-btn.has-dot::after {
-    top: 8px;
-    left: calc(50% + 6px);
+    top: 5px;
+    left: calc(50% + 5px);
   }
 
   .gr-bar-grip {
@@ -1435,8 +1456,34 @@ button.gr-fb-item:hover {
   }
 
   .gr-tip.is-sheet .gr-tip-reply .gr-textarea {
-    border-color: var(--gr-accent);
-    background: #fffbeb;
+    padding: 8px 12px;
+    border-color: #64748b;
+  }
+
+  .gr-tip.is-sheet .gr-tip-reply .gr-textarea::placeholder {
+    color: #475569;
+  }
+
+  .gr-tip.is-sheet .gr-tip-reply .gr-textarea:focus {
+    border-color: var(--gr-ink);
+    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.12);
+  }
+
+  /* Compact sheet: as much room as possible for the note. */
+  .gr-tip.is-sheet .gr-tip-head {
+    padding-top: 4px;
+  }
+
+  .gr-tip.is-sheet .gr-tip-reply {
+    padding-top: 6px;
+  }
+
+  .gr-tip.is-sheet .gr-tip-reply.gr-field {
+    margin-bottom: 6px;
+  }
+
+  .gr-tip.is-sheet .gr-tip-foot {
+    padding: 0 16px 8px;
   }
 
   .gr-tip.is-sheet .gr-tip-title {
@@ -1470,7 +1517,8 @@ button.gr-fb-item:hover {
   }
 
   .gr-tip-foot .gr-btn {
-    min-height: 44px;
+    min-height: 38px;
+    padding: 6px 14px;
   }
 
   .gr-backdrop {
@@ -1544,5 +1592,16 @@ button.gr-fb-item:hover {
 
   .gr-demo-bubble {
     opacity: 1;
+  }
+}
+
+/* Very narrow phones (320px): labels go to two lines instead of being cut. */
+@media (max-width: 340px) {
+  .gr-bar-btn {
+    white-space: normal;
+  }
+
+  .gr-bar-label {
+    overflow: visible;
   }
 }
