@@ -2730,10 +2730,19 @@
     });
   }
 
+  // Phones stretch or bounce the whole screen when the page is pulled past
+  // its top, toolbar included, which cuts off its bottom. Only for the
+  // client's view; pull-to-refresh is not needed on a review page.
+  function holdOverscroll() {
+    if (IS_AUTHOR || !isPhone()) return;
+    try { document.documentElement.style.setProperty('overscroll-behavior-y', 'none'); } catch (e) { /* nothing to do */ }
+  }
+
   function boot() {
     document.body.append(host);
     watchLayout();
     holdForms();
+    holdOverscroll();
     if (IS_AUTHOR) initAuthor();
     else initReviewer();
   }
