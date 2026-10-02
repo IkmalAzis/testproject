@@ -913,6 +913,7 @@
       const onViewport = () => {
         const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
         app.style.setProperty('--gr-kb', kb + 'px');
+        app.style.setProperty('--gr-vvh', Math.round(vv.height) + 'px');
         app.classList.toggle('is-kb', kb > 80);
       };
       vv.addEventListener('resize', onViewport);
@@ -2017,7 +2018,7 @@
           tourFailed && h('p', { class: 'gr-warn' }, 'The guided tour could not be loaded, but you can still leave comments anywhere on the site.'),
           h('ul', { class: 'gr-list' },
             n > 0 && h('li', null, plural(n, 'stop') + ' across ' + plural(pages, 'page') + ', about ' + minutes + ' minutes.'),
-            n > 0 && h('li', null, 'At each stop, read my note and comment if you like. Empty is fine.'),
+            n > 0 && h('li', null, 'At each stop, read my note, then type in the comment box under it if you want something changed. Empty is fine.'),
             h('li', null, 'Anything else: press "Add a comment" and tap the spot.'),
             h('li', null, 'About a whole page: press "This page".'),
             h('li', null, 'No rush. It saves on this phone, so you can look now and comment later on the same link.')),
@@ -2105,11 +2106,12 @@
       // Starts two lines tall and grows with what is typed.
       const fit = () => {
         ta.style.height = 'auto';
-        ta.style.height = Math.min(ta.scrollHeight + 2, 180) + 'px';
+        ta.style.height = Math.min(ta.scrollHeight + 2, isPhone() ? 112 : 180) + 'px';
       };
       const ta = h('textarea', {
         class: 'gr-textarea gr-grow',
-        rows: 2,
+        rows: isPhone() ? 1 : 2,
+        placeholder: isPhone() ? 'Your comment (optional)' : 'Type here, or leave it empty',
         'aria-label': 'Your comment on this part (optional)',
         oninput: () => {
           fb.stepComments[s.id] = ta.value;
@@ -2136,12 +2138,15 @@
             },
           }, h('span', null, s.title || 'Stop ' + (i + 1)), h('span', { class: 'gr-tip-caret', 'aria-hidden': 'true' })),
           h('button', { class: 'gr-icon-btn', type: 'button', title: 'Pause the tour', 'aria-label': 'Pause the tour', onclick: pauseTour }, '×')),
-        h('div', { class: 'gr-tip-body' },
+        h('div', { class: 'gr-tip-body', onscroll: () => markMore(el) },
           h('p', { class: 'gr-note' }, s.note),
           tipPlaces,
           tipWarn,
-          h('label', { class: 'gr-field' }, h('span', { class: 'gr-label' }, 'Your comment (optional)'), ta),
           next && next.page !== s.page && h('p', { class: 'gr-hint' }, 'The next stop is on the ' + pageName(next.page) + ' page.')),
+        // Outside the scrolling note, so the comment box is always in view: a
+        // long note on a phone would otherwise push it out of sight, and the
+        // stop reads as information only.
+        h('label', { class: 'gr-field gr-tip-reply' }, h('span', { class: 'gr-label' }, 'Your comment (optional)'), ta),
         h('div', { class: 'gr-tip-foot' },
           h('button', { class: 'gr-btn', type: 'button', disabled: i === 0, onclick: () => goStep(i - 1) }, '← Previous'),
           h('span', { class: 'gr-count', 'aria-live': 'polite' }, (i + 1) + ' / ' + n),
@@ -2150,6 +2155,14 @@
       head.title = 'Drag to move this note';
       head.addEventListener('pointerdown', (e) => dragTip(e, el, head));
       return el;
+    }
+
+    // A note longer than its space fades out at the bottom, so it is clear
+    // there is more to read.
+    function markMore(el) {
+      const body = el && el.querySelector('.gr-tip-body');
+      if (!body) return;
+      el.classList.toggle('has-more', body.scrollHeight - body.scrollTop - body.clientHeight > 4);
     }
 
     // Several elements at once: one dimmed layer with a hole for each, and an
@@ -2284,6 +2297,7 @@
       } else {
         placeTip(R, scroll);
       }
+      markMore(tip);
     }
 
     // Desktop: beside the element, never over it.
@@ -2368,7 +2382,7 @@
       // Only an element taller than most of the screen can end up underneath.
       const inset = topInset();
       const avail = window.innerHeight - barSpace() - inset;
-      tip.style.maxHeight = Math.round(clamp(avail - R.h - 24, Math.min(200, avail * 0.5), avail * 0.6)) + 'px';
+      tip.style.maxHeight = Math.round(clamp(avail - R.h - 24, Math.min(250, avail * 0.5), avail * 0.6)) + 'px';
       if (!scroll) return;
       const sheetTop = window.innerHeight - tip.offsetHeight - barSpace();
       const onScreen = R.y >= window.scrollY + inset + 8 && R.y + R.h <= window.scrollY + sheetTop - 8;

@@ -824,6 +824,28 @@ p {
   margin-bottom: 10px;
 }
 
+/* The comment box sits between the note and Previous / Next and never
+   scrolls away. */
+.gr-tip-reply {
+  flex: none;
+  padding: 8px 16px 0;
+  border-top: 1px solid transparent;
+}
+
+.gr-tip.has-more .gr-tip-reply {
+  border-top-color: #e2e8f0;
+}
+
+/* More note below: fade the last line. */
+.gr-tip.has-more .gr-tip-body {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+
+.gr-tip.has-more .gr-note {
+  margin-bottom: 20px;
+}
+
 .gr-tip .gr-hint {
   margin-bottom: 10px;
 }
@@ -1391,13 +1413,30 @@ button.gr-fb-item:hover {
     width: auto;
     max-width: none;
     max-height: 55vh;
-    overflow: auto;
+    /* Only the note scrolls; the comment box and Previous / Next stay. */
+    overflow: hidden;
     border-radius: 16px 16px 0 0;
     box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.18);
   }
 
   .is-kb .gr-tip.is-sheet {
     bottom: var(--gr-kb);
+    /* Typing: the note gives way, the comment box stays above the keyboard. */
+    max-height: calc(var(--gr-vvh, 60vh) - 12px) !important;
+  }
+
+  /* On a phone the box says what it is for; the label would take a line. */
+  .gr-tip.is-sheet .gr-tip-reply .gr-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .gr-tip.is-sheet .gr-tip-reply .gr-textarea {
+    border-color: var(--gr-accent);
+    background: #fffbeb;
   }
 
   .gr-tip.is-sheet .gr-tip-title {
@@ -1421,6 +1460,7 @@ button.gr-fb-item:hover {
   }
 
   .gr-tip.is-min .gr-tip-body,
+  .gr-tip.is-min .gr-tip-reply,
   .gr-tip.is-min .gr-tip-foot {
     display: none;
   }
