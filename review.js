@@ -907,17 +907,51 @@
     // Catches accordions, lazy images and fade-ins that move things around.
     setInterval(scheduleLayout, 1500);
 
-    // iOS keeps fixed elements behind the on-screen keyboard; lift them.
+    // How far the bottom of the screen the browser lays fixed elements out
+    // against is below the bottom of what can be seen. Two cases:
+    // - iOS keeps fixed elements behind the on-screen keyboard (a big gap):
+    //   the toolbar hides and the open card moves above the keyboard.
+    // - Some phones (Chrome on Android, with the address bar showing) lay them
+    //   out a little below the visible screen, cutting off the toolbar's
+    //   bottom (a small gap): the toolbar and the tour card are lifted by it.
+    // Measured with an empty fixed marker at bottom: 0.
     if (window.visualViewport) {
       const vv = window.visualViewport;
+      const probe = h('div', { class: 'gr-probe', 'aria-hidden': 'true' });
+      fixedLayer.append(probe);
+      let queued = false;
       const onViewport = () => {
-        const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-        app.style.setProperty('--gr-kb', kb + 'px');
+        queued = false;
+        const fixedBottom = probe.getBoundingClientRect().top;
+        const seenBottom = vv.offsetTop + vv.height;
+        const gap = Math.max(0, Math.round(Math.max(fixedBottom, window.innerHeight) - seenBottom));
+        const kb = gap > 80;
+        app.style.setProperty('--gr-kb', gap + 'px');
+        // Not while zoomed in: then the gap is just the part zoomed out of view.
+        app.style.setProperty('--gr-lift', (kb || vv.scale > 1.05 ? 0 : gap) + 'px');
         app.style.setProperty('--gr-vvh', Math.round(vv.height) + 'px');
-        app.classList.toggle('is-kb', kb > 80);
+        app.classList.toggle('is-kb', kb);
+        // ?gr-debug in the address: show the numbers (for checking a phone).
+        if (debugBox) {
+          debugBox.textContent = 'fixed ' + Math.round(fixedBottom) + ' · inner ' + window.innerHeight +
+            ' · seen ' + Math.round(seenBottom) + ' (h ' + Math.round(vv.height) + ' top ' + Math.round(vv.offsetTop) +
+            ' scale ' + vv.scale.toFixed(2) + ') · lift ' + (kb ? 0 : gap);
+        }
       };
-      vv.addEventListener('resize', onViewport);
-      vv.addEventListener('scroll', onViewport);
+      const debugBox = /[?&]gr-debug\b/.test(location.search) ? h('div', { class: 'gr-debug' }) : null;
+      if (debugBox) fixedLayer.append(debugBox);
+      const queue = () => {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(onViewport);
+      };
+      vv.addEventListener('resize', queue);
+      vv.addEventListener('scroll', queue);
+      window.addEventListener('scroll', queue, { passive: true });
+      window.addEventListener('resize', queue);
+      window.addEventListener('touchend', () => setTimeout(queue, 350), { passive: true });
+      setInterval(queue, 1000);
+      queue();
     }
   }
 
